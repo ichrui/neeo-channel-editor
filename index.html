@@ -137,9 +137,6 @@
     <label>Brain IP</label>
     <input type="text" id="ipInput" placeholder="192.168.1.135" style="width:140px" onkeydown="if(event.key==='Enter') loadFromBrain()">
     <button id="loadBrainBtn" onclick="loadFromBrain()">Load from Brain</button>
-    <span class="meta">or</span>
-    <button class="secondary" onclick="document.getElementById('fileInput').click()">Load backup file</button>
-    <input type="file" id="fileInput" accept="application/json" style="display:none" onchange="loadFromFile(event)">
   </div>
   <span class="pill" id="sourcePill">nothing loaded</span>
 </header>
@@ -182,7 +179,7 @@
         <button onclick="submitAddChannel()">Add</button>
         <button class="secondary" onclick="toggleAddForm()">Cancel</button>
       </div>
-      <div class="hint">Written to the Brain immediately (or added locally in file mode - don't forget "Download edited file" afterwards).</div>
+      <div class="hint">Written to the Brain immediately.</div>
     </div>
 
     <div class="table-scroll">
@@ -219,7 +216,7 @@ let hasBrain = false;
 let devices = [];        // for the "new channel" dropdown
 let collapsedGroups = new Set(); // roomKey|deviceKey values that are collapsed
 let rawData = null;      // the full loaded project structure (mutated in place as you edit)
-let currentIp = null;    // the Brain IP currently connected to (null in file mode)
+let currentIp = null;    // the Brain IP currently connected to
 
 function keyOf(ch) { return ch.roomKey + '|' + ch.deviceKey + '|' + ch.index; }
 function groupKeyOf(ch) { return ch.roomKey + '|' + ch.deviceKey; }
@@ -412,30 +409,6 @@ async function loadFromBrain() {
   }
 }
 
-async function loadFromFile(evt) {
-  const file = evt.target.files[0];
-  if (!file) return;
-  setStatus('Reading file &hellip;');
-  try {
-    const text = await file.text();
-    const raw = JSON.parse(text);
-    rawData = raw;
-    currentIp = null;
-    channels = extractChannelsFromRaw(raw);
-    devices = extractDevicesFromRaw(raw);
-    hasBrain = false;
-    bootstrapOriginals();
-    populateDeviceDropdown();
-    document.getElementById('sourcePill').textContent = 'file loaded: ' + file.name + ' (' + channels.length + ' channels)';
-    document.getElementById('sourcePill').className = 'pill ok';
-    document.getElementById('tableCard').style.display = 'block';
-    setStatus('File loaded. You can download your changes below as a file (no live Brain connected, so direct saving is not possible).', 'ok');
-    renderTable();
-  } catch (e) {
-    setStatus('Error while reading file: ' + e.message, 'err');
-  }
-}
-
 function bootstrapOriginals() {
   originals = {};
   channels.forEach(ch => { originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr}); });
@@ -495,7 +468,7 @@ async function submitAddChannel() {
     document.getElementById('addChannelNr').value = '';
     document.getElementById('addLogoUrl').value = '';
     document.getElementById('addCustom').checked = false;
-    setStatus('"' + name + '" added' + (hasBrain ? ' and written to the Brain.' : ' (locally - use "Download edited file" to apply it).'), 'ok');
+    setStatus('"' + name + '" added and written to the Brain.', 'ok');
     renderTable();
   } catch (e) {
     setStatus('Error while adding: ' + e.message, 'err');
@@ -566,7 +539,7 @@ function renderTable() {
         <td><label class="toggle"><input type="checkbox" ${ch.custom ? 'checked' : ''} data-i="${i}" data-f="custom"><span class="slider"></span></label></td>
         <td>
           <div class="action-cell">
-            <button class="save-btn ${dirty ? 'dirty' : ''}" data-i="${i}" onclick="saveOne(${i}, this)">${hasBrain ? 'Save' : 'Apply'}</button>
+            <button class="save-btn ${dirty ? 'dirty' : ''}" data-i="${i}" onclick="saveOne(${i}, this)">Save</button>
             <button class="danger del-btn" data-i="${i}" onclick="deleteOne(${i}, this)" title="Delete channel">&#128465;</button>
           </div>
         </td>
@@ -798,7 +771,6 @@ function escapeAttr(s) { return escapeHtml(s); }
 async function saveOne(i, btnEl) {
   const ch = channels[i];
   if (!hasBrain) {
-    // No live Brain: "Apply" just marks it as saved locally, the download does the rest.
     applyEditToRaw(rawData, ch.roomKey, ch.deviceKey, ch.index, ch.name, ch.logoUrl, ch.custom, ch.channelNr);
     originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr});
     btnEl.classList.remove('dirty', 'error');
@@ -822,7 +794,7 @@ async function saveOne(i, btnEl) {
     setStatus('Error while saving "' + ch.name + '": ' + e.message, 'err');
   } finally {
     btnEl.disabled = false;
-    setTimeout(() => { if (btnEl.textContent === 'Saved' || btnEl.textContent === 'Error') btnEl.textContent = hasBrain ? 'Save' : 'Apply'; }, 2500);
+    setTimeout(() => { if (btnEl.textContent === 'Saved' || btnEl.textContent === 'Error') btnEl.textContent = 'Save'; }, 2500);
   }
 }
 
@@ -831,9 +803,6 @@ async function saveAllDirty() {
   if (dirtyTotal === 0) { setStatus('No changes to save.', ''); return; }
   setStatus('Saving ' + dirtyTotal + ' changed channels &hellip;');
 
-  // Important: also save changed channels that are currently NOT visible
-  // due to search/filter - so iterate over channels directly instead of
-  // only the visible buttons in the table.
   const dirtyIdx = channels.map((ch, i) => i).filter(i => isDirty(channels[i]));
   let ok = 0, failed = 0;
   for (const i of dirtyIdx) {
@@ -871,13 +840,12 @@ async function deleteOne(i, btnEl) {
       }
       await brainDeleteFavoriteSlot(currentIp, ch.roomKey, ch.deviceKey, oldLength - 1);
     }
-    // Remove locally and re-index the remaining channels of this device
     const gk = groupKeyOf(ch);
     channels.splice(i, 1);
     let newIdx = 0;
     channels.forEach(c => { if (groupKeyOf(c) === gk) { c.index = newIdx; newIdx++; } });
     bootstrapOriginals();
-    setStatus('"' + ch.name + '" deleted' + (hasBrain ? ' from the Brain.' : ' locally - use "Download edited file" to apply it.'), 'ok');
+    setStatus('"' + ch.name + '" deleted from the Brain.', 'ok');
     renderTable();
   } catch (e) {
     btnEl.disabled = false;
