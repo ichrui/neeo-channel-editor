@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEEO Channel Editor</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+    --text: #e7e9ee; --muted: #8a92a3; --accent: #4f8cff; --accent2: #3a6fd8;
+    --green: #34c77b; --red: #ff5c5c; --yellow: #f5c542;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    background: var(--panel);
+  }
+  header h1 { font-size: 17px; margin: 0; margin-right: 12px; white-space: nowrap; }
+  .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+  .pill.ok { color: var(--green); border-color: var(--green); }
+  .pill.err { color: var(--red); border-color: var(--red); }
+
+  main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 18px;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  input[type=text], input[type=search] {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 14px;
+  }
+  button {
+    background: var(--accent); color: white; border: none; padding: 8px 14px;
+    border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;
+  }
+  button:hover { background: var(--accent2); }
+  button.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+  button.secondary:hover { background: #262b36; }
+  button.danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
+  button.danger:hover { background: var(--red); color: white; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  label { color: var(--muted); font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:hover td { background: #1a1e27; }
+  .logo-preview { width: 36px; height: 36px; object-fit: contain; background: #fff1; border-radius: 6px; border: 1px solid var(--border); }
+  .logo-cell { display: flex; align-items: center; gap: 8px; }
+  .logo-cell input { width: 260px; }
+  .name-cell input { width: 160px; }
+  .toggle { position: relative; width: 42px; height: 24px; display: inline-block; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; cursor: pointer; inset: 0; background: #3a3f4b; border-radius: 999px; transition: .15s; }
+  .slider:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: .15s; }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider:before { transform: translateX(18px); }
+  .save-btn { padding: 6px 10px; font-size: 13px; }
+  .save-btn.dirty { background: var(--yellow); color: #222; }
+  .save-btn.saved { background: var(--green); }
+  .save-btn.error { background: var(--red); }
+  .action-cell { display: flex; gap: 6px; }
+  .del-btn { padding: 6px 9px; font-size: 13px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .toolbar {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+    position: sticky; top: 0; z-index: 20; background: var(--panel);
+    padding: 12px 0 10px 0; margin: -16px -16px 0 -16px; padding-left: 16px; padding-right: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .badge-room { color: var(--muted); font-size: 12px; }
+  #status { font-size: 13px; color: var(--muted); min-height: 18px; }
+  #status.err { color: var(--red); }
+  #status.ok { color: var(--green); }
+  .filters { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px;}
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  a.link { color: var(--accent); text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+
+  /* Group headers (Room / Device) */
+  tr.group-row td {
+    position: sticky; top: 53px; z-index: 10;
+    background: var(--panel2); border-bottom: 1px solid var(--border);
+    padding: 9px 8px; font-weight: 600; cursor: pointer; user-select: none;
+  }
+  tr.group-row:hover td { background: #262b36; }
+  tr.group-row .chevron { display: inline-block; width: 14px; transition: transform .12s; color: var(--muted); }
+  tr.group-row.collapsed .chevron { transform: rotate(-90deg); }
+  tr.group-row .group-title { color: var(--text); }
+  tr.group-row .group-sub { color: var(--muted); font-weight: 400; }
+  tr.group-row .group-count { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  tr.channel-row.hidden-collapsed { display: none; }
+  .nr-cell input { width: 55px; }
+
+  /* Drag & drop */
+  .drag-handle {
+    width: 22px; text-align: center; color: var(--muted); cursor: grab;
+    letter-spacing: -2px; font-size: 15px; user-select: none;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  tr.channel-row.drop-before td { box-shadow: inset 0 2px 0 var(--accent); }
+  tr.channel-row.drop-after td { box-shadow: inset 0 -2px 0 var(--accent); }
+  tr.group-row.drop-after td { box-shadow: inset 0 -2px 0 var(--green); }
+
+  /* Up/down move buttons (touch-friendly alternative to drag & drop,
+     e.g. on iPhone where native HTML5 drag & drop isn't supported) */
+  .move-cell { display: flex; flex-direction: column; gap: 2px; }
+  .move-btn {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+    padding: 2px 6px; font-size: 10px; border-radius: 4px; line-height: 1.2;
+  }
+  .move-btn:hover:not(:disabled) { background: #262b36; color: var(--text); }
+  .move-btn:disabled { opacity: .25; cursor: default; }
+
+  /* Horizontal scroll for the table on narrow screens (iPhone) */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 700px) {
+    .drag-handle { display: none; } /* native drag & drop doesn't work on iOS Safari anyway */
+    table { min-width: 640px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#128225; NEEO Channel Editor</h1>
+  <div class="row">
+    <label>Brain IP</label>
+    <input type="text" id="ipInput" placeholder="192.168.1.135" style="width:140px" onkeydown="if(event.key==='Enter') loadFromBrain()">
+    <button id="loadBrainBtn" onclick="loadFromBrain()">Load from Brain</button>
+    <span class="meta">or</span>
+    <button class="secondary" onclick="document.getElementById('fileInput').click()">Load backup file</button>
+    <input type="file" id="fileInput" accept="application/json" style="display:none" onchange="loadFromFile(event)">
+  </div>
+  <span class="pill" id="sourcePill">nothing loaded</span>
+</header>
+<div style="padding: 8px 24px; font-size: 12px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--border);">
+  Runs entirely in your browser - no server, no installation, no account. Requests go straight from this page to your Brain on your local network and nowhere else.
+</div>
+
+<main>
+  <div id="status"></div>
+
+  <div class="card" id="tableCard" style="display:none">
+    <div class="toolbar">
+      <div class="row">
+        <input type="search" id="searchInput" placeholder="Search channels&hellip;" oninput="renderTable()" style="width:220px">
+        <label class="row" style="gap:6px"><input type="checkbox" id="onlyCustom" onchange="renderTable()"> only custom channels</label>
+        <span class="meta" id="countMeta"></span>
+      </div>
+      <div class="row">
+        <button class="secondary" onclick="setAllCustom(false)">All visible &rarr; Custom OFF</button>
+        <button class="secondary" onclick="setAllCustom(true)">All visible &rarr; Custom ON</button>
+        <button class="secondary" onclick="downloadJson()">Download edited file</button>
+        <button class="secondary" onclick="toggleAddForm()">+ New channel</button>
+        <button class="secondary" onclick="expandCollapseAll(true)">Collapse all</button>
+        <button class="secondary" onclick="expandCollapseAll(false)">Expand all</button>
+        <button id="saveAllBtn" onclick="saveAllDirty()">&#128190; Save all changes (<span id="dirtyCount">0</span>)</button>
+      </div>
+    </div>
+
+    <div class="card" id="addForm" style="display:none; margin-top:10px; background:var(--panel2)">
+      <div class="row">
+        <label>Device</label>
+        <select id="addDevice"></select>
+        <label>Channel name</label>
+        <input type="text" id="addName" placeholder="e.g. SRF zwei" style="width:140px">
+        <label>Nr.</label>
+        <input type="text" id="addChannelNr" placeholder="e.g. 2" style="width:60px">
+        <label>Logo URL</label>
+        <input type="text" id="addLogoUrl" placeholder="https://..." style="width:220px">
+        <label class="row" style="gap:6px"><input type="checkbox" id="addCustom"> Custom</label>
+        <button onclick="submitAddChannel()">Add</button>
+        <button class="secondary" onclick="toggleAddForm()">Cancel</button>
+      </div>
+      <div class="hint">Written to the Brain immediately (or added locally in file mode - don't forget "Download edited file" afterwards).</div>
+    </div>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:26px"></th>
+          <th style="width:44px"></th>
+          <th>Channel name</th>
+          <th>Nr.</th>
+          <th>Logo</th>
+          <th>Custom</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    </div>
+  </div>
+</main>
+
+<script>
+// ===========================================================================
+// This is a fully client-side (browser-only) version of the tool - there is
+// NO server involved at all. Every request below goes directly from your
+// browser to your NEEO Brain on your local network. Nothing is sent
+// anywhere else, and nothing about your setup is visible to whoever hosts
+// this page (e.g. GitHub Pages) - nothing.
+// ===========================================================================
+
+let channels = [];       // current state (editable)
+let originals = {};      // key -> original values for dirty-check comparison
+let hasBrain = false;
+let devices = [];        // for the "new channel" dropdown
+let collapsedGroups = new Set(); // roomKey|deviceKey values that are collapsed
+let rawData = null;      // the full loaded project structure (mutated in place as you edit)
+let currentIp = null;    // the Brain IP currently connected to (null in file mode)
+
+function keyOf(ch) { return ch.roomKey + '|' + ch.deviceKey + '|' + ch.index; }
+function groupKeyOf(ch) { return ch.roomKey + '|' + ch.deviceKey; }
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls || '';
+}
+
+// ---------------------------------------------------------------------
+// Direct Brain communication (replaces what used to be a local Python
+// server - every one of these is a real network request straight from
+// this browser tab to your Brain)
+// ---------------------------------------------------------------------
+
+async function brainGetProject(ip) {
+  const res = await fetch('http://' + ip + ':3000/v1/projects/home/');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return await res.json();
+}
+
+async function brainPostFavorite(ip, roomKey, deviceKey, index, channelObj, channelNr) {
+  const url = 'http://' + ip + ':3000/v1/projects/home/rooms/' + roomKey +
+              '/devices/' + deviceKey + '/favorites/' + index + '?limit=-1';
+  const res = await fetch(url, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({channel: channelObj, channelNr: String(channelNr)})
+  });
+  if (!res.ok) throw new Error('Brain rejected the change (HTTP ' + res.status + ').');
+}
+
+async function brainDeleteFavoriteSlot(ip, roomKey, deviceKey, index) {
+  // Best-effort cleanup of a now-unused trailing slot after a delete -
+  // the write API is index-based and undocumented, so failures here are
+  // silently ignored (matches the previous server version's behavior).
+  try {
+    const url = 'http://' + ip + ':3000/v1/projects/home/rooms/' + roomKey +
+                '/devices/' + deviceKey + '/favorites/' + index + '?limit=-1';
+    await fetch(url, {method: 'DELETE'});
+  } catch (e) { /* best effort only */ }
+}
+
+// ---------------------------------------------------------------------
+// Data structure helpers (ported from the previous Python backend -
+// same logic, now running entirely in the browser)
+// ---------------------------------------------------------------------
+
+function getProjectObj(raw) {
+  if (raw && raw.rooms) return raw;
+  if (raw && raw.project && raw.project.rooms) return raw.project;
+  throw new Error("Unknown data structure - 'rooms' not found.");
+}
+
+function extractChannelsFromRaw(raw) {
+  const project = getProjectObj(raw);
+  const result = [];
+  for (const roomName in project.rooms) {
+    const room = project.rooms[roomName];
+    for (const deviceName in (room.devices || {})) {
+      const device = room.devices[deviceName];
+      const favs = device.favorites || [];
+      favs.forEach((fav, idx) => {
+        const ch = fav.channel || {};
+        result.push({
+          roomName, roomKey: room.key, deviceName, deviceKey: device.key, index: idx,
+          channelNr: fav.channelNr || '',
+          name: ch.name || '', language: ch.language || '', country: ch.country || '',
+          logoUrl: ch.logoUrl || '', custom: !!ch.custom
+        });
+      });
+    }
+  }
+  return result;
+}
+
+function extractDevicesFromRaw(raw) {
+  const project = getProjectObj(raw);
+  const result = [];
+  for (const roomName in project.rooms) {
+    const room = project.rooms[roomName];
+    for (const deviceName in (room.devices || {})) {
+      const device = room.devices[deviceName];
+      if (!('favorites' in device)) continue;
+      result.push({roomName, roomKey: room.key, deviceName, deviceKey: device.key});
+    }
+  }
+  return result;
+}
+
+function findDeviceInRaw(raw, roomKey, deviceKey) {
+  const project = getProjectObj(raw);
+  for (const roomName in project.rooms) {
+    const room = project.rooms[roomName];
+    if (room.key !== roomKey) continue;
+    for (const deviceName in (room.devices || {})) {
+      const device = room.devices[deviceName];
+      if (device.key === deviceKey) return device;
+    }
+  }
+  return null;
+}
+
+function applyEditToRaw(raw, roomKey, deviceKey, index, name, logoUrl, custom, channelNr) {
+  const device = findDeviceInRaw(raw, roomKey, deviceKey);
+  if (!device) throw new Error('Room/device not found (roomKey/deviceKey no longer match).');
+  const favs = device.favorites || [];
+  if (index < 0 || index >= favs.length) throw new Error('Favorite index out of range.');
+  favs[index].channel = favs[index].channel || {};
+  favs[index].channel.name = name;
+  favs[index].channel.logoUrl = logoUrl;
+  favs[index].channel.custom = !!custom;
+  favs[index].channelNr = String(channelNr);
+  return favs[index].channel;
+}
+
+function addChannelToRaw(raw, roomKey, deviceKey, name, logoUrl, custom, channelNr) {
+  const device = findDeviceInRaw(raw, roomKey, deviceKey);
+  if (!device) throw new Error('Room/device not found.');
+  if (!device.favorites) device.favorites = [];
+  const newEntry = {channel: {name, logoUrl, custom: !!custom}, channelNr: String(channelNr)};
+  device.favorites.push(newEntry);
+  return {index: device.favorites.length - 1, channel: newEntry.channel};
+}
+
+function reorderFavoritesInRaw(raw, roomKey, deviceKey, orderedChannels) {
+  const device = findDeviceInRaw(raw, roomKey, deviceKey);
+  if (!device) throw new Error('Room/device not found.');
+  device.favorites = orderedChannels.map(c => ({
+    channel: {name: c.name, logoUrl: c.logoUrl, custom: !!c.custom},
+    channelNr: String(c.channelNr)
+  }));
+  return device.favorites;
+}
+
+function deleteChannelFromRaw(raw, roomKey, deviceKey, index) {
+  const device = findDeviceInRaw(raw, roomKey, deviceKey);
+  if (!device) throw new Error('Room/device not found.');
+  const favs = device.favorites || [];
+  if (index < 0 || index >= favs.length) throw new Error('Favorite index out of range.');
+  const oldLength = favs.length;
+  favs.splice(index, 1);
+  device.favorites = favs;
+  return {remaining: favs, oldLength};
+}
+
+async function persistEdit(ch) {
+  const updated = applyEditToRaw(rawData, ch.roomKey, ch.deviceKey, ch.index, ch.name, ch.logoUrl, ch.custom, ch.channelNr);
+  if (hasBrain) {
+    await brainPostFavorite(currentIp, ch.roomKey, ch.deviceKey, ch.index, updated, ch.channelNr);
+  }
+}
+
+function downloadJson() {
+  const blob = new Blob([JSON.stringify(rawData, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'project-home_edited.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+function downloadBackup(raw, tag) {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const blob = new Blob([JSON.stringify(raw, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'neeo-backup_' + tag + '_' + ts + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+async function loadFromBrain() {
+  const ip = document.getElementById('ipInput').value.trim();
+  if (!ip) { setStatus('Please enter the Brain IP first.', 'err'); return; }
+  setStatus('Connecting to Brain ' + ip + ' &hellip;');
+  document.getElementById('loadBrainBtn').disabled = true;
+  try {
+    const raw = await brainGetProject(ip);
+    rawData = raw;
+    currentIp = ip;
+    channels = extractChannelsFromRaw(raw);
+    devices = extractDevicesFromRaw(raw);
+    hasBrain = true;
+    bootstrapOriginals();
+    populateDeviceDropdown();
+    document.getElementById('sourcePill').textContent = 'connected to ' + ip + ' (' + channels.length + ' channels)';
+    document.getElementById('sourcePill').className = 'pill ok';
+    document.getElementById('tableCard').style.display = 'block';
+    downloadBackup(raw, 'brain');
+    setStatus('Loaded. A backup copy was automatically downloaded to your Downloads folder.', 'ok');
+    renderTable();
+  } catch (e) {
+    setStatus('Error while loading: ' + e.message + ' (make sure this device is on the same network as your Brain).', 'err');
+    document.getElementById('sourcePill').textContent = 'error';
+    document.getElementById('sourcePill').className = 'pill err';
+  } finally {
+    document.getElementById('loadBrainBtn').disabled = false;
+  }
+}
+
+async function loadFromFile(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  setStatus('Reading file &hellip;');
+  try {
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    rawData = raw;
+    currentIp = null;
+    channels = extractChannelsFromRaw(raw);
+    devices = extractDevicesFromRaw(raw);
+    hasBrain = false;
+    bootstrapOriginals();
+    populateDeviceDropdown();
+    document.getElementById('sourcePill').textContent = 'file loaded: ' + file.name + ' (' + channels.length + ' channels)';
+    document.getElementById('sourcePill').className = 'pill ok';
+    document.getElementById('tableCard').style.display = 'block';
+    setStatus('File loaded. You can download your changes below as a file (no live Brain connected, so direct saving is not possible).', 'ok');
+    renderTable();
+  } catch (e) {
+    setStatus('Error while reading file: ' + e.message, 'err');
+  }
+}
+
+function bootstrapOriginals() {
+  originals = {};
+  channels.forEach(ch => { originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr}); });
+  updateDirtyCount();
+}
+
+function isDirty(ch) {
+  return originals[keyOf(ch)] !== JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr});
+}
+
+function updateDirtyCount() {
+  const n = channels.filter(isDirty).length;
+  document.getElementById('dirtyCount').textContent = n;
+  document.getElementById('saveAllBtn').style.opacity = n === 0 ? '.6' : '1';
+}
+
+function populateDeviceDropdown() {
+  const sel = document.getElementById('addDevice');
+  sel.innerHTML = '';
+  devices.forEach((d, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = d.roomName + ' / ' + d.deviceName;
+    sel.appendChild(opt);
+  });
+}
+
+function toggleAddForm() {
+  const el = document.getElementById('addForm');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function submitAddChannel() {
+  const devIdx = document.getElementById('addDevice').value;
+  const dev = devices[devIdx];
+  if (!dev) { setStatus('Please choose a device.', 'err'); return; }
+  const name = document.getElementById('addName').value.trim();
+  const channelNr = document.getElementById('addChannelNr').value.trim();
+  const logoUrl = document.getElementById('addLogoUrl').value.trim();
+  const custom = document.getElementById('addCustom').checked;
+  if (!name) { setStatus('Please enter a channel name.', 'err'); return; }
+
+  try {
+    const result = addChannelToRaw(rawData, dev.roomKey, dev.deviceKey, name, logoUrl, custom, channelNr);
+    if (hasBrain) {
+      await brainPostFavorite(currentIp, dev.roomKey, dev.deviceKey, result.index, result.channel, channelNr);
+    }
+    const newCh = {
+      roomName: dev.roomName, roomKey: dev.roomKey,
+      deviceName: dev.deviceName, deviceKey: dev.deviceKey,
+      index: result.index, channelNr, name, logoUrl, custom,
+      language: '', country: ''
+    };
+    channels.push(newCh);
+    originals[keyOf(newCh)] = JSON.stringify({name: newCh.name, logoUrl: newCh.logoUrl, custom: newCh.custom, channelNr: newCh.channelNr});
+    document.getElementById('addName').value = '';
+    document.getElementById('addChannelNr').value = '';
+    document.getElementById('addLogoUrl').value = '';
+    document.getElementById('addCustom').checked = false;
+    setStatus('"' + name + '" added' + (hasBrain ? ' and written to the Brain.' : ' (locally - use "Download edited file" to apply it).'), 'ok');
+    renderTable();
+  } catch (e) {
+    setStatus('Error while adding: ' + e.message, 'err');
+  }
+}
+
+function renderTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const onlyCustom = document.getElementById('onlyCustom').checked;
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  let shown = 0;
+
+  // Group by room+device, order = first occurrence in channels
+  const groups = new Map(); // groupKey -> {roomName, deviceName, roomKey, deviceKey, items: [{ch, i}]}
+  channels.forEach((ch, i) => {
+    if (onlyCustom && !ch.custom) return;
+    const hay = (ch.name + ' ' + ch.roomName + ' ' + ch.deviceName).toLowerCase();
+    if (q && !hay.includes(q)) return;
+    const gk = groupKeyOf(ch);
+    if (!groups.has(gk)) {
+      groups.set(gk, {roomName: ch.roomName, deviceName: ch.deviceName, roomKey: ch.roomKey, deviceKey: ch.deviceKey, items: []});
+    }
+    groups.get(gk).items.push({ch, i});
+    shown++;
+  });
+
+  for (const [gk, g] of groups) {
+    const collapsed = collapsedGroups.has(gk);
+    const groupTr = document.createElement('tr');
+    groupTr.className = 'group-row' + (collapsed ? ' collapsed' : '');
+    groupTr.dataset.gk = gk;
+    groupTr.innerHTML = `
+      <td colspan="6" onclick="toggleGroup('${gk}')">
+        <span class="chevron">&#9660;</span>
+        <span class="group-title">${escapeHtml(g.deviceName)}</span>
+        <span class="group-sub"> &mdash; ${escapeHtml(g.roomName)}</span>
+        <span class="group-count">${g.items.length} channels</span>
+      </td>`;
+    groupTr.addEventListener('dragover', onGroupDragOver);
+    groupTr.addEventListener('dragleave', onRowDragLeave);
+    groupTr.addEventListener('drop', onGroupDrop);
+    tbody.appendChild(groupTr);
+
+    g.items.forEach(({ch, i}) => {
+      const tr = document.createElement('tr');
+      tr.className = 'channel-row' + (collapsed ? ' hidden-collapsed' : '');
+      tr.dataset.i = i;
+      tr.dataset.gk = gk;
+      const dirty = isDirty(ch);
+      const {pos, size} = groupPosition(i);
+      tr.innerHTML = `
+        <td class="drag-handle" draggable="true" title="Drag to move/copy">&#8942;&#8942;</td>
+        <td>
+          <div class="move-cell">
+            <button class="move-btn" ${pos <= 0 ? 'disabled' : ''} onclick="moveChannel(${i}, -1)" title="Move up">&#9650;</button>
+            <button class="move-btn" ${pos >= size - 1 ? 'disabled' : ''} onclick="moveChannel(${i}, 1)" title="Move down">&#9660;</button>
+          </div>
+        </td>
+        <td class="name-cell"><input type="text" value="${escapeHtml(ch.name)}" data-i="${i}" data-f="name"></td>
+        <td class="nr-cell"><input type="text" value="${escapeHtml(ch.channelNr)}" data-i="${i}" data-f="channelNr"></td>
+        <td>
+          <div class="logo-cell">
+            <img class="logo-preview" src="${escapeAttr(ch.logoUrl)}" onerror="this.style.visibility='hidden'">
+            <input type="text" value="${escapeHtml(ch.logoUrl)}" data-i="${i}" data-f="logoUrl">
+          </div>
+        </td>
+        <td><label class="toggle"><input type="checkbox" ${ch.custom ? 'checked' : ''} data-i="${i}" data-f="custom"><span class="slider"></span></label></td>
+        <td>
+          <div class="action-cell">
+            <button class="save-btn ${dirty ? 'dirty' : ''}" data-i="${i}" onclick="saveOne(${i}, this)">${hasBrain ? 'Save' : 'Apply'}</button>
+            <button class="danger del-btn" data-i="${i}" onclick="deleteOne(${i}, this)" title="Delete channel">&#128465;</button>
+          </div>
+        </td>
+      `;
+      const handle = tr.querySelector('.drag-handle');
+      handle.addEventListener('dragstart', (e) => onRowDragStart(e, i));
+      tr.addEventListener('dragover', onRowDragOver);
+      tr.addEventListener('dragleave', onRowDragLeave);
+      tr.addEventListener('drop', onRowDrop);
+      tr.addEventListener('dragend', clearDragIndicators);
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('countMeta').textContent = shown + ' of ' + channels.length + ' channels';
+
+  tbody.querySelectorAll('input[type=text]').forEach(inp => {
+    inp.addEventListener('input', onFieldChange);
+  });
+  tbody.querySelectorAll('input[type=checkbox]').forEach(inp => {
+    inp.addEventListener('change', onFieldChange);
+  });
+}
+
+// ---------------------------------------------------------------------
+// Drag & drop: reorder within a device, copy across devices
+// ---------------------------------------------------------------------
+let dragSourceIndex = null;
+
+function onRowDragStart(e, i) {
+  dragSourceIndex = i;
+  e.dataTransfer.effectAllowed = 'copyMove';
+  e.dataTransfer.setData('text/plain', String(i));
+}
+
+function onRowDragOver(e) {
+  e.preventDefault();
+  const tr = e.currentTarget;
+  const rect = tr.getBoundingClientRect();
+  const before = (e.clientY - rect.top) < rect.height / 2;
+  clearDragIndicators();
+  tr.classList.add(before ? 'drop-before' : 'drop-after');
+  const sameGroup = dragSourceIndex !== null && groupKeyOf(channels[dragSourceIndex]) === tr.dataset.gk;
+  e.dataTransfer.dropEffect = sameGroup ? 'move' : 'copy';
+}
+
+function onGroupDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drop-after');
+  const sameGroup = dragSourceIndex !== null && groupKeyOf(channels[dragSourceIndex]) === e.currentTarget.dataset.gk;
+  e.dataTransfer.dropEffect = sameGroup ? 'move' : 'copy';
+}
+
+function onRowDragLeave(e) {
+  e.currentTarget.classList.remove('drop-before', 'drop-after');
+}
+
+function clearDragIndicators() {
+  document.querySelectorAll('.drop-before, .drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
+}
+
+async function onRowDrop(e) {
+  e.preventDefault();
+  clearDragIndicators();
+  const targetTr = e.currentTarget;
+  const targetIndex = parseInt(targetTr.dataset.i);
+  if (dragSourceIndex === null || isNaN(targetIndex)) return;
+  const rect = targetTr.getBoundingClientRect();
+  const before = (e.clientY - rect.top) < rect.height / 2;
+  await handleDrop(dragSourceIndex, targetTr.dataset.gk, targetIndex, before);
+  dragSourceIndex = null;
+}
+
+async function onGroupDrop(e) {
+  e.preventDefault();
+  clearDragIndicators();
+  const gk = e.currentTarget.dataset.gk;
+  if (dragSourceIndex === null) return;
+  await handleDrop(dragSourceIndex, gk, null, false); // append at end of group
+  dragSourceIndex = null;
+}
+
+async function handleDrop(sourceIdx, targetGk, targetIdx, insertBefore) {
+  const source = channels[sourceIdx];
+  const sourceGk = groupKeyOf(source);
+
+  if (sourceGk === targetGk) {
+    // Same device group -> just change the order
+    await reorderWithinGroup(targetGk, sourceIdx, targetIdx, insertBefore);
+  } else {
+    // Different device group -> copy (original stays untouched)
+    await copyToGroup(source, targetGk);
+  }
+}
+
+async function reorderWithinGroup(gk, sourceIdx, targetIdx, insertBefore) {
+  // Determine the current order of this group
+  const groupItems = channels
+    .map((ch, i) => ({ch, i}))
+    .filter(({ch}) => groupKeyOf(ch) === gk);
+  let order = groupItems.map(({i}) => i);
+
+  order = order.filter(i => i !== sourceIdx);
+  let insertAt;
+  if (targetIdx === null) {
+    insertAt = order.length; // append at the end (dropped on group header)
+  } else {
+    insertAt = order.indexOf(targetIdx);
+    if (insertAt === -1) insertAt = order.length;
+    if (!insertBefore) insertAt += 1;
+  }
+  order.splice(insertAt, 0, sourceIdx);
+
+  const orderedChannels = order.map(i => channels[i]);
+  await applyReorder(gk, orderedChannels);
+}
+
+// Full (unfiltered) position of a channel within its device group -
+// used both to enable/disable the up/down arrow buttons and to compute
+// the new order when they're tapped. Always based on the full list, not
+// the currently search-filtered view, so arrows behave predictably even
+// while a search/filter is active.
+function groupPosition(i) {
+  const gk = groupKeyOf(channels[i]);
+  const order = channels.map((c, idx) => idx).filter(idx => groupKeyOf(channels[idx]) === gk);
+  return {pos: order.indexOf(i), size: order.length, order};
+}
+
+async function moveChannel(i, direction) {
+  const {pos, size, order} = groupPosition(i);
+  const newPos = pos + direction;
+  if (newPos < 0 || newPos >= size) return;
+  const newOrder = order.slice();
+  [newOrder[pos], newOrder[newPos]] = [newOrder[newPos], newOrder[pos]];
+  const gk = groupKeyOf(channels[i]);
+  const orderedChannels = newOrder.map(idx => channels[idx]);
+  await applyReorder(gk, orderedChannels);
+}
+
+async function applyReorder(gk, orderedChannels) {
+  setStatus('Saving new order &hellip;');
+  try {
+    const roomKey = orderedChannels[0].roomKey;
+    const deviceKey = orderedChannels[0].deviceKey;
+    const newFavs = reorderFavoritesInRaw(
+      rawData, roomKey, deviceKey,
+      orderedChannels.map(c => ({name: c.name, logoUrl: c.logoUrl, custom: c.custom, channelNr: c.channelNr}))
+    );
+    if (hasBrain) {
+      for (let idx = 0; idx < newFavs.length; idx++) {
+        await brainPostFavorite(currentIp, roomKey, deviceKey, idx, newFavs[idx].channel, newFavs[idx].channelNr);
+      }
+    }
+
+    // Update the local channels list: new order + new indices
+    orderedChannels.forEach((c, newIdx) => { c.index = newIdx; });
+    // Remove from the global array and re-insert in the new group order
+    const others = channels.filter(c => groupKeyOf(c) !== gk);
+    channels = others.concat(orderedChannels);
+    bootstrapOriginals();
+    setStatus('New order saved.', 'ok');
+    renderTable();
+  } catch (e) {
+    setStatus('Error while reordering: ' + e.message, 'err');
+    renderTable();
+  }
+}
+
+async function copyToGroup(source, targetGk) {
+  const targetDevice = devices.find(d => (d.roomKey + '|' + d.deviceKey) === targetGk);
+  if (!targetDevice) { setStatus('Target device not found.', 'err'); return; }
+  setStatus('Copying "' + source.name + '" to ' + targetDevice.deviceName + ' &hellip;');
+  try {
+    const result = addChannelToRaw(rawData, targetDevice.roomKey, targetDevice.deviceKey, source.name, source.logoUrl, source.custom, source.channelNr);
+    if (hasBrain) {
+      await brainPostFavorite(currentIp, targetDevice.roomKey, targetDevice.deviceKey, result.index, result.channel, source.channelNr);
+    }
+    const newCh = {
+      roomName: targetDevice.roomName, roomKey: targetDevice.roomKey,
+      deviceName: targetDevice.deviceName, deviceKey: targetDevice.deviceKey,
+      index: result.index, channelNr: source.channelNr, name: source.name,
+      logoUrl: source.logoUrl, custom: source.custom, language: '', country: ''
+    };
+    channels.push(newCh);
+    originals[keyOf(newCh)] = JSON.stringify({name: newCh.name, logoUrl: newCh.logoUrl, custom: newCh.custom, channelNr: newCh.channelNr});
+    collapsedGroups.delete(targetGk); // expand the target group so you can see it
+    setStatus('"' + source.name + '" copied to ' + targetDevice.deviceName + '.', 'ok');
+    renderTable();
+  } catch (e) {
+    setStatus('Error while copying: ' + e.message, 'err');
+  }
+}
+
+function toggleGroup(gk) {
+  if (collapsedGroups.has(gk)) collapsedGroups.delete(gk); else collapsedGroups.add(gk);
+  renderTable();
+}
+
+function expandCollapseAll(collapse) {
+  collapsedGroups.clear();
+  if (collapse) {
+    const seen = new Set();
+    channels.forEach(ch => seen.add(groupKeyOf(ch)));
+    collapsedGroups = seen;
+  }
+  renderTable();
+}
+
+function onFieldChange(e) {
+  const i = parseInt(e.target.dataset.i);
+  const f = e.target.dataset.f;
+  const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  channels[i][f] = val;
+  const tr = e.target.closest('tr');
+  const btn = tr.querySelector('.save-btn');
+  btn.classList.remove('saved', 'error');
+  if (isDirty(channels[i])) btn.classList.add('dirty'); else btn.classList.remove('dirty');
+  if (f === 'logoUrl') {
+    const img = tr.querySelector('.logo-preview');
+    img.style.visibility = 'visible';
+    img.src = val;
+  }
+  updateDirtyCount();
+}
+
+function escapeHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+async function saveOne(i, btnEl) {
+  const ch = channels[i];
+  if (!hasBrain) {
+    // No live Brain: "Apply" just marks it as saved locally, the download does the rest.
+    applyEditToRaw(rawData, ch.roomKey, ch.deviceKey, ch.index, ch.name, ch.logoUrl, ch.custom, ch.channelNr);
+    originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr});
+    btnEl.classList.remove('dirty', 'error');
+    btnEl.classList.add('saved');
+    updateDirtyCount();
+    return;
+  }
+  btnEl.disabled = true;
+  btnEl.textContent = '...';
+  try {
+    await persistEdit(ch);
+    originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr});
+    btnEl.classList.remove('dirty', 'error');
+    btnEl.classList.add('saved');
+    btnEl.textContent = 'Saved';
+    updateDirtyCount();
+    setStatus('"' + ch.name + '" written to the Brain successfully.', 'ok');
+  } catch (e) {
+    btnEl.classList.add('error');
+    btnEl.textContent = 'Error';
+    setStatus('Error while saving "' + ch.name + '": ' + e.message, 'err');
+  } finally {
+    btnEl.disabled = false;
+    setTimeout(() => { if (btnEl.textContent === 'Saved' || btnEl.textContent === 'Error') btnEl.textContent = hasBrain ? 'Save' : 'Apply'; }, 2500);
+  }
+}
+
+async function saveAllDirty() {
+  const dirtyTotal = channels.filter(isDirty).length;
+  if (dirtyTotal === 0) { setStatus('No changes to save.', ''); return; }
+  setStatus('Saving ' + dirtyTotal + ' changed channels &hellip;');
+
+  // Important: also save changed channels that are currently NOT visible
+  // due to search/filter - so iterate over channels directly instead of
+  // only the visible buttons in the table.
+  const dirtyIdx = channels.map((ch, i) => i).filter(i => isDirty(channels[i]));
+  let ok = 0, failed = 0;
+  for (const i of dirtyIdx) {
+    const ch = channels[i];
+    try {
+      if (hasBrain) {
+        await persistEdit(ch);
+      } else {
+        applyEditToRaw(rawData, ch.roomKey, ch.deviceKey, ch.index, ch.name, ch.logoUrl, ch.custom, ch.channelNr);
+      }
+      originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr});
+      ok++;
+    } catch (e) {
+      failed++;
+    }
+  }
+  updateDirtyCount();
+  renderTable();
+  if (failed === 0) {
+    setStatus('Done. ' + ok + ' channels saved successfully.', 'ok');
+  } else {
+    setStatus(ok + ' saved, ' + failed + ' failed (please check them individually).', 'err');
+  }
+}
+
+async function deleteOne(i, btnEl) {
+  const ch = channels[i];
+  if (!confirm('Delete "' + ch.name + '" from ' + ch.deviceName + '? This cannot be undone.')) return;
+  btnEl.disabled = true;
+  try {
+    const {remaining, oldLength} = deleteChannelFromRaw(rawData, ch.roomKey, ch.deviceKey, ch.index);
+    if (hasBrain) {
+      for (let idx = 0; idx < remaining.length; idx++) {
+        await brainPostFavorite(currentIp, ch.roomKey, ch.deviceKey, idx, remaining[idx].channel, remaining[idx].channelNr);
+      }
+      await brainDeleteFavoriteSlot(currentIp, ch.roomKey, ch.deviceKey, oldLength - 1);
+    }
+    // Remove locally and re-index the remaining channels of this device
+    const gk = groupKeyOf(ch);
+    channels.splice(i, 1);
+    let newIdx = 0;
+    channels.forEach(c => { if (groupKeyOf(c) === gk) { c.index = newIdx; newIdx++; } });
+    bootstrapOriginals();
+    setStatus('"' + ch.name + '" deleted' + (hasBrain ? ' from the Brain.' : ' locally - use "Download edited file" to apply it.'), 'ok');
+    renderTable();
+  } catch (e) {
+    btnEl.disabled = false;
+    setStatus('Error while deleting "' + ch.name + '": ' + e.message, 'err');
+  }
+}
+
+function setAllCustom(val) {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const onlyCustom = document.getElementById('onlyCustom').checked;
+  channels.forEach(ch => {
+    if (onlyCustom && !ch.custom) return;
+    const hay = (ch.name + ' ' + ch.roomName + ' ' + ch.deviceName).toLowerCase();
+    if (q && !hay.includes(q)) return;
+    ch.custom = val;
+  });
+  renderTable();
+}
+
+</script>
+</body>
+</html>
