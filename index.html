@@ -384,18 +384,6 @@ function downloadJson() {
   URL.revokeObjectURL(a.href);
 }
 
-function downloadBackup(raw, tag) {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const blob = new Blob([JSON.stringify(raw, null, 2)], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'neeo-backup_' + tag + '_' + ts + '.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(a.href);
-}
-
 async function loadFromBrain() {
   const ip = document.getElementById('ipInput').value.trim();
   if (!ip) { setStatus('Please enter the Brain IP first.', 'err'); return; }
@@ -413,8 +401,7 @@ async function loadFromBrain() {
     document.getElementById('sourcePill').textContent = 'connected to ' + ip + ' (' + channels.length + ' channels)';
     document.getElementById('sourcePill').className = 'pill ok';
     document.getElementById('tableCard').style.display = 'block';
-    downloadBackup(raw, 'brain');
-    setStatus('Loaded. A backup copy was automatically downloaded to your Downloads folder.', 'ok');
+    setStatus('Loaded successfully.', 'ok');
     renderTable();
   } catch (e) {
     setStatus('Error while loading: ' + e.message + ' (make sure this device is on the same network as your Brain).', 'err');
