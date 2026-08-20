@@ -646,8 +646,9 @@ async function handleDrop(sourceIdx, targetGk, targetIdx, insertBefore) {
     // Same device group -> just change the order
     await reorderWithinGroup(targetGk, sourceIdx, targetIdx, insertBefore);
   } else {
-    // Different device group -> copy (original stays untouched)
-    await copyToGroup(source, targetGk);
+    // Different device group -> copy (original stays untouched), at
+    // the exact position it was dropped, not always at the end.
+    await copyToGroup(source, targetGk, targetIdx, insertBefore);
   }
 }
 
@@ -724,26 +725,45 @@ async function applyReorder(gk, orderedChannels) {
   }
 }
 
-async function copyToGroup(source, targetGk) {
+async function copyToGroup(source, targetGk, targetIdx, insertBefore) {
   const targetDevice = devices.find(d => (d.roomKey + '|' + d.deviceKey) === targetGk);
   if (!targetDevice) { setStatus('Target device not found.', 'err'); return; }
   setStatus('Copying "' + source.name + '" to ' + targetDevice.deviceName + ' &hellip;');
   try {
-    const result = addChannelToRaw(rawData, targetDevice.roomKey, targetDevice.deviceKey, source.name, source.logoUrl, source.custom, source.channelNr);
-    if (hasBrain) {
-      await brainPostFavorite(currentIp, targetDevice.roomKey, targetDevice.deviceKey, result.index, result.channel, source.channelNr);
-    }
+    // The new copy, belonging to the target device.
     const newCh = {
       roomName: targetDevice.roomName, roomKey: targetDevice.roomKey,
       deviceName: targetDevice.deviceName, deviceKey: targetDevice.deviceKey,
-      index: result.index, channelNr: source.channelNr, name: source.name,
+      index: -1, channelNr: source.channelNr, name: source.name,
       logoUrl: source.logoUrl, custom: source.custom, language: '', country: ''
     };
-    channels.push(newCh);
-    originals[keyOf(newCh)] = JSON.stringify({name: newCh.name, logoUrl: newCh.logoUrl, custom: newCh.custom, channelNr: newCh.channelNr});
+
+    // Current order of the target group, then insert the new copy at
+    // the exact position it was dropped (matches reorderWithinGroup's
+    // logic) instead of always appending it at the end.
+    const currentTargetChannels = channels
+      .filter(c => groupKeyOf(c) === targetGk)
+      .sort((a, b) => a.index - b.index);
+
+    let insertAt;
+    if (targetIdx === null || targetIdx === undefined) {
+      insertAt = currentTargetChannels.length; // dropped on the group header -> append at end
+    } else {
+      const targetChannelObj = channels[targetIdx];
+      insertAt = currentTargetChannels.indexOf(targetChannelObj);
+      if (insertAt === -1) insertAt = currentTargetChannels.length;
+      if (!insertBefore) insertAt += 1;
+    }
+
+    const orderedChannels = currentTargetChannels.slice();
+    orderedChannels.splice(insertAt, 0, newCh);
+
+    // Writes the whole target group's order (including our new entry)
+    // to the Brain and merges it back into `channels`.
+    await applyReorder(targetGk, orderedChannels);
+
     collapsedGroups.delete(targetGk); // expand the target group so you can see it
     setStatus('"' + source.name + '" copied to ' + targetDevice.deviceName + '.', 'ok');
-    renderTable();
   } catch (e) {
     setStatus('Error while copying: ' + e.message, 'err');
   }
