@@ -86,9 +86,11 @@
   a.link { color: var(--accent); text-decoration: none; }
   a.link:hover { text-decoration: underline; }
 
-  /* Group headers (Room / Device) */
+  /* Group headers (Room / Device)
+     Note: intentionally NOT position:sticky here - multiple stacked
+     sticky table rows render inconsistently across browsers (uneven
+     spacing between groups), so these just scroll normally instead. */
   tr.group-row td {
-    position: sticky; top: 53px; z-index: 10;
     background: var(--panel2); border-bottom: 1px solid var(--border);
     padding: 9px 8px; font-weight: 600; cursor: pointer; user-select: none;
   }
@@ -501,21 +503,29 @@ function renderTable() {
   tbody.innerHTML = '';
   let shown = 0;
 
-  // Group by room+device, order = first occurrence in channels
-  const groups = new Map(); // groupKey -> {roomName, deviceName, roomKey, deviceKey, items: [{ch, i}]}
+  // Group channels by device. Important: the DISPLAY ORDER of the
+  // groups comes from `devices` (a stable list captured once when data
+  // was loaded), NOT from wherever each channel happens to sit in the
+  // `channels` array right now - that array's order shifts whenever you
+  // reorder/add/delete channels, which used to make whole device groups
+  // visibly jump around after any edit. Using `devices` keeps the
+  // group order fixed no matter what you do to the channels within it.
+  const channelsByGroup = new Map(); // groupKey -> [{ch, i}, ...]
   channels.forEach((ch, i) => {
     if (onlyCustom && !ch.custom) return;
     const hay = (ch.name + ' ' + ch.roomName + ' ' + ch.deviceName).toLowerCase();
     if (q && !hay.includes(q)) return;
     const gk = groupKeyOf(ch);
-    if (!groups.has(gk)) {
-      groups.set(gk, {roomName: ch.roomName, deviceName: ch.deviceName, roomKey: ch.roomKey, deviceKey: ch.deviceKey, items: []});
-    }
-    groups.get(gk).items.push({ch, i});
+    if (!channelsByGroup.has(gk)) channelsByGroup.set(gk, []);
+    channelsByGroup.get(gk).push({ch, i});
     shown++;
   });
 
-  for (const [gk, g] of groups) {
+  for (const dev of devices) {
+    const gk = dev.roomKey + '|' + dev.deviceKey;
+    const items = channelsByGroup.get(gk);
+    if (!items || items.length === 0) continue;
+    const g = {roomName: dev.roomName, deviceName: dev.deviceName, roomKey: dev.roomKey, deviceKey: dev.deviceKey, items};
     const collapsed = collapsedGroups.has(gk);
     const groupTr = document.createElement('tr');
     groupTr.className = 'group-row' + (collapsed ? ' collapsed' : '');
