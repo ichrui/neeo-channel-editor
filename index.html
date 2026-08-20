@@ -175,6 +175,7 @@
         <input type="text" id="addChannelNr" placeholder="e.g. 2" style="width:60px">
         <label>Logo URL</label>
         <input type="text" id="addLogoUrl" placeholder="https://..." style="width:220px">
+        <button class="secondary" onclick="openLogoSearch(document.getElementById('addName'), document.getElementById('addLogoUrl'))" title="Search for a logo based on the channel name">&#128269; Find logo</button>
         <label class="row" style="gap:6px"><input type="checkbox" id="addCustom"> Custom</label>
         <button onclick="submitAddChannel()">Add</button>
         <button class="secondary" onclick="toggleAddForm()">Cancel</button>
@@ -200,6 +201,24 @@
     </div>
   </div>
 </main>
+
+<div id="logoSearchModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:520px; max-width:92vw; max-height:80vh; overflow-y:auto;">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+      <h3 style="margin:0; font-size:15px;">Find a logo</h3>
+      <button class="secondary" onclick="closeLogoSearch()" style="padding:4px 10px;">&times;</button>
+    </div>
+    <div class="row" style="margin-bottom:12px;">
+      <input type="text" id="logoSearchQuery" style="width:280px" onkeydown="if(event.key==='Enter') runLogoSearch()">
+      <button onclick="runLogoSearch()">Search</button>
+    </div>
+    <div id="logoSearchStatus" class="meta"></div>
+    <div id="logoSearchResults" style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:10px;"></div>
+    <div class="hint" style="margin-top:12px;">
+      Logos are found via Wikipedia and converted to square PNGs (256&times;256, transparent background). Accuracy isn't guaranteed - always double-check before using.
+    </div>
+  </div>
+</div>
 
 <script>
 // ===========================================================================
@@ -534,6 +553,7 @@ function renderTable() {
           <div class="logo-cell">
             <img class="logo-preview" src="${escapeAttr(ch.logoUrl)}" onerror="this.style.visibility='hidden'">
             <input type="text" value="${escapeHtml(ch.logoUrl)}" data-i="${i}" data-f="logoUrl">
+            <button class="secondary" style="padding:6px 8px" onclick="openLogoSearch(this.closest('tr').querySelector('[data-f=name]'), this.closest('tr').querySelector('[data-f=logoUrl]'))" title="Search for a logo based on the channel name">&#128269;</button>
           </div>
         </td>
         <td><label class="toggle"><input type="checkbox" ${ch.custom ? 'checked' : ''} data-i="${i}" data-f="custom"><span class="slider"></span></label></td>
@@ -771,6 +791,7 @@ function escapeAttr(s) { return escapeHtml(s); }
 async function saveOne(i, btnEl) {
   const ch = channels[i];
   if (!hasBrain) {
+    // No live Brain: "Apply" just marks it as saved locally, the download does the rest.
     applyEditToRaw(rawData, ch.roomKey, ch.deviceKey, ch.index, ch.name, ch.logoUrl, ch.custom, ch.channelNr);
     originals[keyOf(ch)] = JSON.stringify({name: ch.name, logoUrl: ch.logoUrl, custom: ch.custom, channelNr: ch.channelNr});
     btnEl.classList.remove('dirty', 'error');
@@ -803,6 +824,9 @@ async function saveAllDirty() {
   if (dirtyTotal === 0) { setStatus('No changes to save.', ''); return; }
   setStatus('Saving ' + dirtyTotal + ' changed channels &hellip;');
 
+  // Important: also save changed channels that are currently NOT visible
+  // due to search/filter - so iterate over channels directly instead of
+  // only the visible buttons in the table.
   const dirtyIdx = channels.map((ch, i) => i).filter(i => isDirty(channels[i]));
   let ok = 0, failed = 0;
   for (const i of dirtyIdx) {
@@ -840,6 +864,7 @@ async function deleteOne(i, btnEl) {
       }
       await brainDeleteFavoriteSlot(currentIp, ch.roomKey, ch.deviceKey, oldLength - 1);
     }
+    // Remove locally and re-index the remaining channels of this device
     const gk = groupKeyOf(ch);
     channels.splice(i, 1);
     let newIdx = 0;
@@ -863,6 +888,119 @@ function setAllCustom(val) {
     ch.custom = val;
   });
   renderTable();
+}
+
+// ---------------------------------------------------------------------
+// Logo search - looks up candidate logo images on Wikipedia (free,
+// no API key needed, and Wikimedia's servers allow direct cross-origin
+// requests) based on the channel name, then normalizes every result to
+// a square, transparent-background PNG so they're all consistent
+// regardless of the original file format/shape.
+// ---------------------------------------------------------------------
+const LOGO_CANVAS_SIZE = 256; // px, square. Adjust here if you'd like a different standard size.
+let logoSearchTargetInputs = null; // {nameInput, logoInput} currently being edited
+
+function openLogoSearch(nameInput, logoInput) {
+  logoSearchTargetInputs = {nameInput, logoInput};
+  document.getElementById('logoSearchQuery').value = nameInput.value.trim();
+  document.getElementById('logoSearchResults').innerHTML = '';
+  document.getElementById('logoSearchStatus').textContent = '';
+  document.getElementById('logoSearchModal').style.display = 'flex';
+  if (nameInput.value.trim()) runLogoSearch();
+}
+
+function closeLogoSearch() {
+  document.getElementById('logoSearchModal').style.display = 'none';
+  logoSearchTargetInputs = null;
+}
+
+async function runLogoSearch() {
+  const query = document.getElementById('logoSearchQuery').value.trim();
+  const statusEl = document.getElementById('logoSearchStatus');
+  const resultsEl = document.getElementById('logoSearchResults');
+  if (!query) { statusEl.textContent = 'Enter a channel name first.'; return; }
+
+  statusEl.textContent = 'Searching\u2026';
+  resultsEl.innerHTML = '';
+
+  try {
+    const url = 'https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*' +
+                '&prop=pageimages&piprop=thumbnail&pithumbsize=' + (LOGO_CANVAS_SIZE * 2) +
+                '&generator=search&gsrsearch=' + encodeURIComponent(query) + '&gsrlimit=6';
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = data.query && data.query.pages ? Object.values(data.query.pages) : [];
+    const withImages = pages.filter(p => p.thumbnail && p.thumbnail.source);
+
+    if (withImages.length === 0) {
+      statusEl.textContent = 'No image results found for "' + query + '". Try a different or shorter name.';
+      return;
+    }
+    statusEl.textContent = withImages.length + ' result(s) - click "Use" on the one that matches, or download it as PNG.';
+
+    for (const page of withImages) {
+      const card = document.createElement('div');
+      card.style.cssText = 'background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px; text-align:center;';
+      card.dataset.sourceUrl = page.thumbnail.source;
+      card.innerHTML = `
+        <div style="font-size:12px; color:var(--muted); margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(page.title)}</div>
+        <canvas width="${LOGO_CANVAS_SIZE}" height="${LOGO_CANVAS_SIZE}" style="width:100px; height:100px; background:repeating-conic-gradient(#2a2f3a 0% 25%, #1e222b 0% 50%) 50% / 16px 16px; border-radius:6px;"></canvas>
+        <div class="row" style="justify-content:center; margin-top:8px; gap:6px;">
+          <button style="padding:5px 8px; font-size:12px;" onclick="useLogoCandidate(this)" title="Use the original Wikipedia URL directly (external link)">Use URL</button>
+          <button class="secondary" style="padding:5px 8px; font-size:12px;" onclick="downloadLogoCandidate(this, '${escapeAttr(page.title).replace(/'/g, "\\'")}')" title="Download a square 256x256 PNG to upload to your Brain yourself">Download PNG</button>
+        </div>
+      `;
+      resultsEl.appendChild(card);
+      loadIntoCanvas(page.thumbnail.source, card.querySelector('canvas'));
+    }
+  } catch (e) {
+    statusEl.textContent = 'Error while searching: ' + e.message;
+  }
+}
+
+function loadIntoCanvas(imageUrl, canvas) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous'; // Wikimedia's media servers allow this
+  img.onload = () => {
+    const ctx = canvas.getContext('2d');
+    const size = LOGO_CANVAS_SIZE;
+    // Fit the image into a square canvas without cropping or distorting -
+    // scale to fit, center it, leave the rest transparent.
+    const scale = Math.min(size / img.width, size / img.height);
+    const w = img.width * scale, h = img.height * scale;
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+    canvas.dataset.ready = '1';
+  };
+  img.onerror = () => {
+    canvas.dataset.ready = '0';
+  };
+  img.src = imageUrl;
+}
+
+function useLogoCandidate(btnEl) {
+  const card = btnEl.closest('[data-source-url]');
+  if (!logoSearchTargetInputs || !card) return;
+  logoSearchTargetInputs.logoInput.value = card.dataset.sourceUrl;
+  logoSearchTargetInputs.logoInput.dispatchEvent(new Event('input', {bubbles: true}));
+  closeLogoSearch();
+}
+
+function downloadLogoCandidate(btnEl, titleForFilename) {
+  const card = btnEl.closest('[data-source-url]');
+  const canvas = card ? card.querySelector('canvas') : null;
+  if (!canvas) return;
+  try {
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    const safeName = (titleForFilename || 'logo').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+    a.download = safeName + '.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    setStatus('Could not export this image as PNG (cross-origin restriction from the image source).', 'err');
+  }
 }
 
 </script>
