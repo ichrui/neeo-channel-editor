@@ -157,9 +157,6 @@
         <span class="meta" id="countMeta"></span>
       </div>
       <div class="row">
-        <button class="secondary" onclick="setAllCustom(false)">All visible &rarr; Custom OFF</button>
-        <button class="secondary" onclick="setAllCustom(true)">All visible &rarr; Custom ON</button>
-        <button class="secondary" onclick="downloadJson()">Download edited file</button>
         <button class="secondary" onclick="toggleAddForm()">+ New channel</button>
         <button class="secondary" onclick="expandCollapseAll(true)">Collapse all</button>
         <button class="secondary" onclick="expandCollapseAll(false)">Expand all</button>
@@ -389,17 +386,6 @@ async function persistEdit(ch) {
   if (hasBrain) {
     await brainPostFavorite(currentIp, ch.roomKey, ch.deviceKey, ch.index, updated, ch.channelNr);
   }
-}
-
-function downloadJson() {
-  const blob = new Blob([JSON.stringify(rawData, null, 2)], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'project-home_edited.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(a.href);
 }
 
 async function loadFromBrain() {
@@ -886,18 +872,6 @@ async function deleteOne(i, btnEl) {
     btnEl.disabled = false;
     setStatus('Error while deleting "' + ch.name + '": ' + e.message, 'err');
   }
-}
-
-function setAllCustom(val) {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  const onlyCustom = document.getElementById('onlyCustom').checked;
-  channels.forEach(ch => {
-    if (onlyCustom && !ch.custom) return;
-    const hay = (ch.name + ' ' + ch.roomName + ' ' + ch.deviceName).toLowerCase();
-    if (q && !hay.includes(q)) return;
-    ch.custom = val;
-  });
-  renderTable();
 }
 
 // ---------------------------------------------------------------------
