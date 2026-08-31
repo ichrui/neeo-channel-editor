@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NEEO Channel Editor</title>
+
+<!-- OPTIONAL: privacy-friendly visit analytics (no cookies, free for
+     personal use) via https://www.goatcounter.com/ - to enable:
+     1. Sign up at goatcounter.com, pick a site code (e.g. "neeo-editor")
+     2. Replace YOURSITECODE in the line below with that site code
+     3. Delete the "<!--" right above the <script> line and the "-->"
+        right below it (just those two markers) to activate it
+<script data-goatcounter="https://YOURSITECODE.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+-->
+
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
@@ -169,7 +179,7 @@
         <label>Device</label>
         <select id="addDevice"></select>
         <label>Channel name</label>
-        <input type="text" id="addName" placeholder="e.g. SRF zwei" style="width:140px">
+        <input type="text" id="addName" placeholder="e.g. SRF zwei" style="width:140px" oninput="suggestExistingLogo()">
         <label>Nr.</label>
         <input type="text" id="addChannelNr" placeholder="e.g. 2" style="width:60px">
         <label>Logo URL</label>
@@ -179,6 +189,7 @@
         <button onclick="submitAddChannel()">Add</button>
         <button class="secondary" onclick="toggleAddForm()">Cancel</button>
       </div>
+      <div class="hint" id="addLogoSuggestHint" style="display:none; color:var(--accent);"></div>
       <div class="hint">Written to the Brain immediately.</div>
     </div>
 
@@ -446,6 +457,59 @@ function populateDeviceDropdown() {
 function toggleAddForm() {
   const el = document.getElementById('addForm');
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  document.getElementById('addLogoSuggestHint').style.display = 'none';
+}
+
+// If a channel with the same name already exists somewhere else in this
+// config, reuse its logo, channel number, and "custom" flag instead of
+// making you re-enter them. Any field you've already filled in yourself
+// (or the "Custom" checkbox, if you've already ticked it) is left alone -
+// you just get a one-click suggestion for those instead of an automatic
+// overwrite.
+function suggestExistingLogo() {
+  const hintEl = document.getElementById('addLogoSuggestHint');
+  const name = document.getElementById('addName').value.trim().toLowerCase();
+  if (!name) { hintEl.style.display = 'none'; return; }
+
+  const match = channels.find(c => c.name.trim().toLowerCase() === name && c.logoUrl && c.logoUrl.trim());
+  if (!match) { hintEl.style.display = 'none'; return; }
+
+  const logoField = document.getElementById('addLogoUrl');
+  const nrField = document.getElementById('addChannelNr');
+  const customField = document.getElementById('addCustom');
+  const matchNr = (match.channelNr || '').toString().trim();
+
+  const logoIsDefault = !logoField.value.trim();
+  const nrIsDefault = !nrField.value.trim();
+  const customIsDefault = !customField.checked;
+
+  const applied = [];
+  if (logoIsDefault) { logoField.value = match.logoUrl; applied.push('logo'); }
+  if (nrIsDefault && matchNr) { nrField.value = matchNr; applied.push('number'); }
+  if (customIsDefault && match.custom) { customField.checked = true; applied.push('custom flag'); }
+
+  const logoDiffers = logoField.value.trim() !== match.logoUrl.trim();
+  const nrDiffers = nrField.value.trim() !== matchNr;
+  const customDiffers = customField.checked !== !!match.custom;
+
+  if (applied.length > 0) {
+    hintEl.textContent = '\u2713 Auto-filled ' + applied.join(', ') + ' - "' + match.name + '" already exists on "' + match.deviceName + '".';
+    hintEl.style.display = 'block';
+  } else if (logoDiffers || nrDiffers || customDiffers) {
+    hintEl.innerHTML = 'This channel already exists on "' + escapeHtml(match.deviceName) +
+      '" with different values - <a href="#" class="link" onclick="event.preventDefault(); useExistingLogoSuggestion(' +
+      JSON.stringify(match.logoUrl) + ', ' + JSON.stringify(matchNr) + ', ' + (!!match.custom) + ')">use those instead</a>.';
+    hintEl.style.display = 'block';
+  } else {
+    hintEl.style.display = 'none';
+  }
+}
+
+function useExistingLogoSuggestion(logoUrl, channelNr, custom) {
+  document.getElementById('addLogoUrl').value = logoUrl;
+  document.getElementById('addChannelNr').value = channelNr;
+  document.getElementById('addCustom').checked = custom;
+  document.getElementById('addLogoSuggestHint').style.display = 'none';
 }
 
 async function submitAddChannel() {
@@ -475,6 +539,7 @@ async function submitAddChannel() {
     document.getElementById('addChannelNr').value = '';
     document.getElementById('addLogoUrl').value = '';
     document.getElementById('addCustom').checked = false;
+    document.getElementById('addLogoSuggestHint').style.display = 'none';
     setStatus('"' + name + '" added and written to the Brain.', 'ok');
     renderTable();
   } catch (e) {
