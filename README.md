@@ -19,6 +19,9 @@ device that's on the same local network as your NEEO Brain and go.
   or copy a channel from one device to another
 - **Find a logo automatically** based on the channel name (via Wikipedia),
   normalized to a square transparent PNG
+- **Auto-fills logo, channel number, and the "custom" flag** when adding
+  a channel that already exists on another device - no need to look up
+  or re-type values you've already set elsewhere
 - Group/collapse by room and device, search/filter
 - Every change is written straight to your Brain the moment you save -
   no export/import step
