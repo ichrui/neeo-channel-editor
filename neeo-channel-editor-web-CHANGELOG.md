@@ -13,7 +13,7 @@ All notable changes to the NEEO Channel Editor (Web) are documented here.
   Austrian channels are ranked first. Each result shows its source.
 - The "Error while loading" message now explains, on the https (GitHub
   Pages) version, that iPhone/iPad browsers block access to the Brain and
-  points to the Mac app as the mobile alternative.
+  asks the user to open the page on a laptop/computer (Brave or Chrome).
 - The file list of the repository is built into the page (no API calls,
   no rate limits).
 

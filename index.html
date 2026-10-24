@@ -412,7 +412,7 @@ async function loadFromBrain() {
   } catch (e) {
     let msg = 'Error while loading: ' + e.message + ' (make sure this device is on the same network as your Brain).';
     if (location.protocol === 'https:') {
-      msg += ' Note: this secure (https) page cannot reach your Brain from iPhone/iPad (Safari and all iOS browsers) - the browser blocks it. On mobile, use the Mac app instead (open its network address, e.g. http://<Mac-IP>:8642, and add it to the Home Screen). On a computer, use Brave or Chrome.';
+      msg += ' Note: this secure (https) page cannot reach your Brain from iPhone/iPad (Safari and all iOS browsers) - the browser blocks it. Please open this page on a laptop/computer instead, using Brave or Chrome.';
     }
     setStatus(msg, 'err');
     document.getElementById('sourcePill').textContent = 'error';
