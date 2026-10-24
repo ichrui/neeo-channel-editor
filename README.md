@@ -17,8 +17,10 @@ device that's on the same local network as your NEEO Brain and go.
 - Add new channels, delete channels
 - Reorder channels via drag & drop or up/down buttons - within a device,
   or copy a channel from one device to another
-- **Find a logo automatically** based on the channel name (via Wikipedia),
-  normalized to a square transparent PNG
+- **Find a logo automatically** based on the channel name - first in the
+  [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos) collection on
+  GitHub (~10,000 TV logos, many Swiss/German/Austrian channels), then via
+  Wikipedia. Results are normalized to a square transparent PNG
 - **Auto-fills logo, channel number, and the "custom" flag** when adding
   a channel that already exists on another device - no need to look up
   or re-type values you've already set elsewhere
@@ -99,5 +101,17 @@ This tool sends data to exactly one place: your Brain's IP address, on
 your own local network. It doesn't use cookies, analytics, or any
 third-party service, except for one thing: the "Find logo" feature
 queries Wikipedia's public API (`en.wikipedia.org`) with the channel
-name you're searching for, to find a matching logo image. No other data
-leaves your network at any point.
+name you're searching for, and loads the matching logo previews from
+`raw.githubusercontent.com` (tv-logo/tv-logos). The list of available
+GitHub logos is built into the page, so the channel name is not sent to
+GitHub - only the preview images are requested. No other data leaves your
+network at any point.
+
+## Logo sources and licenses
+
+Logos from [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos) are
+free for personal use (CC BY-SA / BY-NC-SA, see that repository). They are
+not bundled with this tool - they are only linked/previewed from GitHub.
+The built-in file list is a snapshot; logos added to the repository later
+won't show up until the list in `index.html` (`TVLOGOS_INDEX`) is
+regenerated.

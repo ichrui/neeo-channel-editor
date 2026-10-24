@@ -5,6 +5,15 @@ All notable changes to the NEEO Channel Editor (Web) are documented here.
 
 ## [Unreleased]
 
+### Added
+- Logo search now also uses the [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos)
+  collection on GitHub (~10,000 TV logos) as its first source, before
+  Wikipedia. Matches follow the repository's naming scheme (e.g. "SRF 1"
+  finds `srf-1-ch.png`, "ORF 1" finds `orf1-at.png`); Swiss, German and
+  Austrian channels are ranked first. Each result shows its source.
+- The file list of the repository is built into the page (no API calls,
+  no rate limits).
+
 ### Fixed
 - Removed a leftover analytics setup comment in the page `<head>` that
   had a bug causing part of its own instructional text to render as
