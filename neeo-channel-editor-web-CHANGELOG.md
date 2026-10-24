@@ -11,6 +11,9 @@ All notable changes to the NEEO Channel Editor (Web) are documented here.
   Wikipedia. Matches follow the repository's naming scheme (e.g. "SRF 1"
   finds `srf-1-ch.png`, "ORF 1" finds `orf1-at.png`); Swiss, German and
   Austrian channels are ranked first. Each result shows its source.
+- The "Error while loading" message now explains, on the https (GitHub
+  Pages) version, that iPhone/iPad browsers block access to the Brain and
+  points to the Mac app as the mobile alternative.
 - The file list of the repository is built into the page (no API calls,
   no rate limits).
 
