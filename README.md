@@ -97,15 +97,22 @@ with one unimportant channel before editing a lot at once.
 
 ## Privacy
 
-This tool sends data to exactly one place: your Brain's IP address, on
-your own local network. It doesn't use cookies, analytics, or any
-third-party service, except for one thing: the "Find logo" feature
-queries Wikipedia's public API (`en.wikipedia.org`) with the channel
-name you're searching for, and loads the matching logo previews from
-`raw.githubusercontent.com` (tv-logo/tv-logos). The list of available
-GitHub logos is built into the page, so the channel name is not sent to
-GitHub - only the preview images are requested. No other data leaves your
-network at any point.
+Your channel data only ever goes to one place: your Brain, on your own
+local network. It doesn't use cookies or any third-party
+service, except for these:
+
+- A privacy-friendly page-view counter ([GoatCounter](https://www.goatcounter.com),
+  no cookies, no personal data) counts how often the page is opened and
+  from which country. It never sees your Brain's IP address or any of your
+  channel data.
+- The "Find logo" feature
+  queries Wikipedia's public API (`en.wikipedia.org`) with the channel
+  name you're searching for, and loads the matching logo previews from
+  `raw.githubusercontent.com` (tv-logo/tv-logos). The list of available
+  GitHub logos is built into the page, so the channel name is not sent to
+  GitHub - only the preview images are requested.
+
+No other data leaves your network at any point.
 
 ## Logo sources and licenses
 

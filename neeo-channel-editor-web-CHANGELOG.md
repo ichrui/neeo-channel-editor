@@ -6,6 +6,8 @@ All notable changes to the NEEO Channel Editor (Web) are documented here.
 ## [Unreleased]
 
 ### Added
+- Anonymous page-view counter (GoatCounter, no cookies) on the hosted
+  version, to see how often and from which countries the page is used.
 - Logo search now also uses the [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos)
   collection on GitHub (~10,000 TV logos) as its first source, before
   Wikipedia. Matches follow the repository's naming scheme (e.g. "SRF 1"
