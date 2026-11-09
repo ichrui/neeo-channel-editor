@@ -21,6 +21,11 @@ device that's on the same local network as your NEEO Brain and go.
   [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos) collection on
   GitHub (~10,000 TV logos, many Swiss/German/Austrian channels), then via
   Wikipedia. Results are normalized to a square transparent PNG
+- **Update channel numbers from a list**: if your provider changes its
+  channel numbers, paste a list (one channel per line, e.g. `SRF 1: 12 -> 11`
+  or `11 SRF 1`) and the editor shows old -> new for each channel of the
+  chosen device. You review, apply, and then save - no need to edit every
+  channel by hand
 - **Auto-fills logo, channel number, and the "custom" flag** when adding
   a channel that already exists on another device - no need to look up
   or re-type values you've already set elsewhere

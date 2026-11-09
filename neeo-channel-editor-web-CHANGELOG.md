@@ -6,6 +6,12 @@ All notable changes to the NEEO Channel Editor (Web) are documented here.
 ## [Unreleased]
 
 ### Added
+- "Update numbers" button: paste a list of channel names and new numbers
+  to correct many channel numbers of one device at once. Matches by name
+  (exact matches are pre-selected, similar names need confirmation),
+  shows old -> new for review, warns about duplicate numbers, and only
+  changes the table - saving to the Brain is still done with "Save all
+  changes".
 - Anonymous page-view counter (GoatCounter, no cookies) on the hosted
   version, to see how often and from which countries the page is used.
 - Logo search now also uses the [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos)

@@ -160,6 +160,7 @@
       </div>
       <div class="row">
         <button class="secondary" onclick="toggleAddForm()">+ New channel</button>
+        <button class="secondary" onclick="openNrImport()" title="Paste a channel list (name + number) to correct many channel numbers at once">Update numbers</button>
         <button class="secondary" onclick="expandCollapseAll(true)">Collapse all</button>
         <button class="secondary" onclick="expandCollapseAll(false)">Expand all</button>
         <button id="saveAllBtn" onclick="saveAllDirty()">&#128190; Save all changes (<span id="dirtyCount">0</span>)</button>
@@ -203,6 +204,35 @@
     </div>
   </div>
 </main>
+
+<div id="nrImportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:760px; max-width:94vw; max-height:88vh; overflow-y:auto;">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+      <h3 style="margin:0; font-size:15px;">Update channel numbers from a list</h3>
+      <button class="secondary" onclick="closeNrImport()" style="padding:4px 10px;">&times;</button>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <label>Device:</label>
+      <select id="nrImportDevice" onchange="runNrImport()"></select>
+    </div>
+    <textarea id="nrImportText" rows="8" style="width:100%; box-sizing:border-box; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:8px; font-family:ui-monospace,Menlo,monospace; font-size:13px;" placeholder="One channel per line, e.g.&#10;SRF 1: 12 -> 11&#10;SRF 1 11&#10;11 SRF 1&#10;RTP1<TAB>2736"></textarea>
+    <div class="row" style="margin-top:8px;">
+      <button onclick="runNrImport()">Check list</button>
+      <span class="meta" id="nrImportSummary"></span>
+    </div>
+    <div id="nrImportWarn" class="meta" style="margin-top:6px; color:var(--yellow);"></div>
+    <div style="overflow-x:auto; margin-top:8px;">
+      <table id="nrImportTable" style="width:100%; border-collapse:collapse; font-size:13px;"></table>
+    </div>
+    <div class="row" style="margin-top:12px; justify-content:flex-end;">
+      <button class="secondary" onclick="closeNrImport()">Cancel</button>
+      <button id="nrImportApply" onclick="applyNrImport()" disabled>Apply selected</button>
+    </div>
+    <div class="hint" style="margin-top:10px;">
+      Only channels of the selected device are compared; everything else in your list is ignored. Applying only changes the numbers in the table &ndash; nothing is sent to the Brain until you press &quot;Save all changes&quot;.
+    </div>
+  </div>
+</div>
 
 <div id="logoSearchModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
   <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:520px; max-width:92vw; max-height:80vh; overflow-y:auto;">
@@ -1161,6 +1191,185 @@ function downloadLogoCandidate(btnEl, titleForFilename) {
   }
 }
 
+
+// ---------------------------------------------------------------------
+// Update channel numbers from a pasted list (name + new number).
+// Only touches the numbers in the table; saving is still done with
+// "Save all changes", like any other edit.
+// ---------------------------------------------------------------------
+let nrImportRows = [];
+
+function nrNorm(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '');
+}
+
+function nrLevenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 2) return 99;
+  let prev = Array.from({length: n + 1}, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function openNrImport() {
+  const sel = document.getElementById('nrImportDevice');
+  sel.innerHTML = '';
+  devices.forEach((d, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = d.roomName + ' / ' + d.deviceName;
+    sel.appendChild(opt);
+  });
+  document.getElementById('nrImportTable').innerHTML = '';
+  document.getElementById('nrImportSummary').textContent = '';
+  document.getElementById('nrImportWarn').textContent = '';
+  document.getElementById('nrImportApply').disabled = true;
+  nrImportRows = [];
+  document.getElementById('nrImportModal').style.display = 'flex';
+}
+
+function closeNrImport() {
+  document.getElementById('nrImportModal').style.display = 'none';
+}
+
+// Turn one pasted line into possible (name, number) readings. Several are
+// possible because names can contain digits ("SRF 1"); the reading whose
+// name matches a channel of the device wins.
+function nrParseLine(line) {
+  const t = line.replace(/^[\s\-•*]+/, '').trim();
+  if (!t) return [];
+  const out = [];
+  const arrow = t.match(/^(.*?)\s*(?:→|->|=>|➜|➔)\s*(\d{1,6})\s*$/);
+  if (arrow) {
+    const left = arrow[1].trim(), nr = arrow[2];
+    out.push({name: left.replace(/[\s:;,\-–(]+\d{1,6}\)?\s*$/, '').trim(), nr});
+    out.push({name: left, nr});
+    return out.filter(c => c.name);
+  }
+  const trail = t.match(/^(.*\S)[\s:;,|\t\-–]+(\d{1,6})$/);
+  if (trail) out.push({name: trail[1].trim(), nr: trail[2]});
+  const lead = t.match(/^(\d{1,6})[\s.:;,|\t\-–)]+(.*\S)$/);
+  if (lead) out.push({name: lead[2].trim(), nr: lead[1]});
+  return out;
+}
+
+function nrMatch(name, devChans) {
+  const n = nrNorm(name);
+  if (!n) return null;
+  const exact = devChans.filter(c => nrNorm(c.ch.name) === n);
+  if (exact.length) return {kind: 'exact', items: exact};
+  if (n.length >= 3) {
+    const part = devChans.filter(c => {
+      const m = nrNorm(c.ch.name);
+      return m.length >= 3 && (m.startsWith(n) || n.startsWith(m));
+    });
+    if (part.length === 1) return {kind: 'fuzzy', items: part};
+    if (n.length >= 5) {
+      const near = devChans.filter(c => nrLevenshtein(nrNorm(c.ch.name), n) <= Math.max(1, Math.floor(n.length / 6)));
+      if (near.length === 1) return {kind: 'fuzzy', items: near};
+    }
+  }
+  return null;
+}
+
+function runNrImport() {
+  const dev = devices[parseInt(document.getElementById('nrImportDevice').value)];
+  const text = document.getElementById('nrImportText').value;
+  const tbl = document.getElementById('nrImportTable');
+  tbl.innerHTML = '';
+  nrImportRows = [];
+  if (!dev || !text.trim()) {
+    document.getElementById('nrImportSummary').textContent = '';
+    document.getElementById('nrImportApply').disabled = true;
+    return;
+  }
+  const devChans = [];
+  channels.forEach((ch, i) => { if (ch.roomKey === dev.roomKey && ch.deviceKey === dev.deviceKey) devChans.push({ch, i}); });
+
+  const touched = new Set();
+  for (const line of text.split(/\r?\n/)) {
+    const cands = nrParseLine(line);
+    if (!cands.length) continue;
+    let best = null;
+    for (const c of cands) {
+      const m = nrMatch(c.name, devChans);
+      if (m && (!best || (m.kind === 'exact' && best.m.kind !== 'exact'))) best = {c, m};
+    }
+    if (!best) { nrImportRows.push({kind: 'none', label: line.trim()}); continue; }
+    best.m.items.forEach(it => touched.add(it.i));
+    const first = best.m.items[0].ch;
+    const oldNr = String(first.channelNr || '');
+    const changed = best.m.items.some(it => String(it.ch.channelNr || '') !== best.c.nr);
+    nrImportRows.push({
+      kind: best.m.kind, label: line.trim(), idx: best.m.items.map(it => it.i),
+      brainName: best.m.items.map(it => it.ch.name).join(' / '), oldNr, newNr: best.c.nr,
+      changed, checked: changed && best.m.kind === 'exact'
+    });
+  }
+
+  const th = '<tr style="text-align:left; color:var(--muted);"><th style="padding:4px 6px;"></th><th style="padding:4px 6px;">From your list</th><th style="padding:4px 6px;">Channel on the Brain</th><th style="padding:4px 6px;">Number</th><th style="padding:4px 6px;">Status</th></tr>';
+  let html = th;
+  nrImportRows.forEach((r, k) => {
+    const cell = 'padding:4px 6px; border-top:1px solid var(--border);';
+    if (r.kind === 'none') {
+      html += `<tr style="opacity:.55"><td style="${cell}"></td><td style="${cell}">${escapeHtml(r.label)}</td><td style="${cell}">&ndash;</td><td style="${cell}">&ndash;</td><td style="${cell}">not found in this device &ndash; ignored</td></tr>`;
+    } else if (!r.changed) {
+      html += `<tr style="opacity:.55"><td style="${cell}"></td><td style="${cell}">${escapeHtml(r.label)}</td><td style="${cell}">${escapeHtml(r.brainName)}</td><td style="${cell}">${escapeHtml(r.oldNr)}</td><td style="${cell}">unchanged</td></tr>`;
+    } else {
+      const status = r.kind === 'exact' ? 'will change' : 'similar name &ndash; please check';
+      html += `<tr><td style="${cell}"><input type="checkbox" data-k="${k}" ${r.checked ? 'checked' : ''} onchange="nrImportRows[${k}].checked=this.checked; updateNrImportSummary()"></td><td style="${cell}">${escapeHtml(r.label)}</td><td style="${cell}">${escapeHtml(r.brainName)}</td><td style="${cell}">${escapeHtml(r.oldNr)} &rarr; <b>${escapeHtml(r.newNr)}</b></td><td style="${cell}">${status}</td></tr>`;
+    }
+  });
+  tbl.innerHTML = html;
+  const missing = devChans.filter(c => !touched.has(c.i)).length;
+  nrImportRows.missing = missing;
+  updateNrImportSummary();
+}
+
+function updateNrImportSummary() {
+  const rows = nrImportRows;
+  const sel = rows.filter(r => r.checked).length;
+  const same = rows.filter(r => r.kind !== 'none' && !r.changed).length;
+  const none = rows.filter(r => r.kind === 'none').length;
+  const fuzzy = rows.filter(r => r.kind === 'fuzzy' && r.changed).length;
+  document.getElementById('nrImportSummary').textContent =
+    sel + ' selected, ' + same + ' unchanged, ' + fuzzy + ' to check, ' + none + ' not found, ' +
+    (rows.missing || 0) + ' Brain channel(s) not in your list';
+  document.getElementById('nrImportApply').disabled = sel === 0;
+
+  // Warn if the result would give two channels of this device the same number
+  const dev = devices[parseInt(document.getElementById('nrImportDevice').value)];
+  const finalNr = new Map();
+  channels.forEach((ch, i) => { if (dev && ch.roomKey === dev.roomKey && ch.deviceKey === dev.deviceKey) finalNr.set(i, String(ch.channelNr || '')); });
+  rows.forEach(r => { if (r.checked) r.idx.forEach(i => finalNr.set(i, r.newNr)); });
+  const seen = new Map(), dups = new Set();
+  finalNr.forEach((nr, i) => {
+    if (!nr) return;
+    if (seen.has(nr)) { dups.add(nr); } else { seen.set(nr, i); }
+  });
+  document.getElementById('nrImportWarn').textContent = dups.size
+    ? 'Note: after this change the number(s) ' + Array.from(dups).join(', ') + ' would be used by more than one channel.'
+    : '';
+}
+
+function applyNrImport() {
+  let n = 0;
+  for (const r of nrImportRows) {
+    if (!r.checked) continue;
+    for (const i of r.idx) { channels[i].channelNr = r.newNr; n++; }
+  }
+  closeNrImport();
+  renderTable();
+  updateDirtyCount();
+  setStatus(n + ' channel number(s) updated in the table - check them and press "Save all changes" to write them to the Brain.', 'ok');
+}
 </script>
 </body>
 </html>
