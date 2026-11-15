@@ -47,7 +47,11 @@ BRAIN_SSH_KEY = os.environ.get("NEEO_BRAIN_KEY", os.path.expanduser("~/.ssh/neeo
 BRAIN_SSH_USER = os.environ.get("NEEO_BRAIN_USER", "neeo")
 BRAIN_PICS_DIR = os.environ.get("NEEO_PICS_DIR", "/opt/mobile/eui/pics")
 SSH_BIN = os.environ.get("NEEO_SSH_BIN", "ssh")
-APP_VERSION = "1.3.2"
+# Settings and backups live next to each other in the user's home folder.
+DATA_DIR = os.environ.get("NEEO_EDITOR_DIR", os.path.expanduser("~/.neeo-channel-editor"))
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+BACKUP_KEEP = 40
+APP_VERSION = "1.4.0"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get("NEEO_UPDATE_URL")  # test override
@@ -317,8 +321,7 @@ PAGE = r"""<!DOCTYPE html>
   <h1>&#128225; NEEO Channel Editor</h1>
   <button id="gearBtn" class="secondary" type="button" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;&#xFE0E;<span id="gearDot"></span></button>
   <div class="row">
-    <label>Brain IP</label>
-    <input type="text" id="ipInput" value="192.168.1.135" placeholder="192.168.1.135" style="width:140px" onkeydown="if(event.key==='Enter') loadFromBrain()">
+    <input type="hidden" id="ipInput" value="192.168.1.135">
     <button id="loadBrainBtn" onclick="loadFromBrain()">Load from Brain</button>
   </div>
   <span class="pill" id="sourcePill">nothing loaded</span>
@@ -390,7 +393,23 @@ PAGE = r"""<!DOCTYPE html>
       <h3 style="margin:0; font-size:15px;">Settings</h3>
       <button class="secondary" onclick="closeSettings()" style="padding:4px 10px;">&times;</button>
     </div>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Software update</div>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Brain</div>
+    <div class="row" style="gap:8px;">
+      <label>Brain IP</label>
+      <input type="text" id="setIp" style="width:150px" inputmode="decimal" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button type="button" onclick="saveBrainIp()">Save</button>
+    </div>
+    <div id="setIpMsg" class="meta" style="margin-top:4px;"></div>
+
+    <div style="font-size:12px; color:var(--muted); margin:18px 0 6px;">Backup of the channel lists</div>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">A backup is made automatically before the first change after loading. It is stored on this server (last 40 are kept).</div>
+    <div class="row" style="gap:8px;">
+      <button class="secondary" type="button" onclick="createBackup('manual')">Create backup now</button>
+    </div>
+    <div id="backupMsg" class="meta" style="margin-top:4px;"></div>
+    <div id="backupList" style="margin-top:8px;"></div>
+
+    <div style="font-size:12px; color:var(--muted); margin:18px 0 6px;">Software update</div>
     <div class="row" style="gap:10px; align-items:center;">
       <span id="updText" style="font-size:13px;">Version __VERSION__</span>
     </div>
@@ -398,6 +417,21 @@ PAGE = r"""<!DOCTYPE html>
       <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)">Check for updates</button>
       <button id="updNowBtn" type="button" onclick="doUpdate()" style="display:none;">Update now</button>
     </div>
+  </div>
+</div>
+
+<div id="restoreModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:110; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:420px; max-width:92vw; max-height:85vh; overflow-y:auto;">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+      <h3 style="margin:0; font-size:15px;">Restore from backup</h3>
+      <button class="secondary" onclick="closeRestore()" style="padding:4px 10px;">&times;</button>
+    </div>
+    <div id="restoreInfo" class="meta" style="margin-bottom:8px;"></div>
+    <select id="restoreDevice" style="width:100%; margin-bottom:10px;"></select>
+    <div class="row" style="gap:8px;">
+      <button id="restoreBtn" type="button" onclick="doRestore()">Restore this list</button>
+    </div>
+    <div id="restoreMsg" class="meta" style="margin-top:8px;"></div>
   </div>
 </div>
 
@@ -467,6 +501,7 @@ let originals = {};      // key -> original values for dirty-check comparison
 let hasBrain = false;
 let devices = [];        // for the "new channel" dropdown
 let collapsedGroups = new Set(); // roomKey|deviceKey values that are collapsed
+let restoreRunning = false;
 let rawData = null;      // the full loaded project structure (mutated in place as you edit)
 let currentIp = null;    // the Brain IP currently connected to
 
@@ -492,6 +527,7 @@ async function brainGetProject(ip) {
 }
 
 async function brainPostFavorite(ip, roomKey, deviceKey, index, channelObj, channelNr) {
+  if (!restoreRunning) await ensureAutoBackup();
   const url = 'http://' + ip + ':3000/v1/projects/home/rooms/' + roomKey +
               '/devices/' + deviceKey + '/favorites/' + index + '?limit=-1';
   const res = await fetch(url, {
@@ -624,11 +660,12 @@ async function persistEdit(ch) {
 
 async function loadFromBrain() {
   const ip = document.getElementById('ipInput').value.trim();
-  if (!ip) { setStatus('Please enter the Brain IP first.', 'err'); return; }
+  if (!ip) { setStatus('Please set the Brain IP in Settings (gear, top right) first.', 'err'); return; }
   setStatus('Connecting to Brain ' + ip + ' &hellip;');
   document.getElementById('loadBrainBtn').disabled = true;
   try {
     const raw = await brainGetProject(ip);
+    pristineJson = JSON.stringify(raw); backedUpThisLoad = false;
     rawData = raw;
     currentIp = ip;
     channels = extractChannelsFromRaw(raw);
@@ -1588,7 +1625,113 @@ function applyNrImport() {
 }
 
 // ---- settings + self-update (server version only) ----
-function openSettings() { document.getElementById('settingsModal').style.display = 'flex'; checkUpdate(false); }
+function openSettings() {
+  document.getElementById('settingsModal').style.display = 'flex';
+  document.getElementById('setIp').value = document.getElementById('ipInput').value;
+  document.getElementById('setIpMsg').textContent = ''; document.getElementById('backupMsg').textContent = '';
+  refreshBackups(); checkUpdate(false);
+}
+
+async function loadSettings() {
+  try { const j = await (await fetch('/api/settings')).json(); if (j.brainIp) document.getElementById('ipInput').value = j.brainIp; } catch (e) {}
+}
+async function saveBrainIp() {
+  const ip = document.getElementById('setIp').value.trim(), m = document.getElementById('setIpMsg');
+  try {
+    const j = await (await fetch('/api/settings', {method: 'POST', body: JSON.stringify({brainIp: ip})})).json();
+    if (!j.ok) { m.textContent = 'Not saved: ' + j.error; return; }
+    document.getElementById('ipInput').value = j.brainIp;
+    m.textContent = 'Saved. Tap "Load from Brain" to use it.';
+  } catch (e) { m.textContent = 'Not saved: ' + e; }
+}
+
+// ---- backups (stored on the server) ----
+let pristineJson = null;       // the Brain's data exactly as loaded
+let backedUpThisLoad = false;
+
+async function postBackup(json, reason) {
+  const r = await fetch('/api/backup?reason=' + encodeURIComponent(reason), {method: 'POST', body: json});
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.name;
+}
+async function ensureAutoBackup() {
+  if (backedUpThisLoad || !pristineJson) return;
+  try { await postBackup(pristineJson, 'auto'); backedUpThisLoad = true; }
+  catch (e) { if (!confirm('Could not create a backup (' + e.message + '). Continue without backup?')) throw new Error('cancelled - no backup'); backedUpThisLoad = true; }
+}
+async function createBackup(reason) {
+  const m = document.getElementById('backupMsg');
+  if (!pristineJson) { m.textContent = 'Load the channels from the Brain first.'; return; }
+  m.textContent = 'Saving backup...';
+  try {
+    // backup of the Brain as it is right now (not including unsaved edits)
+    const raw = await brainGetProject(document.getElementById('ipInput').value.trim());
+    await postBackup(JSON.stringify(raw), reason);
+    m.textContent = 'Backup created.'; refreshBackups();
+  } catch (e) { m.textContent = 'Backup failed: ' + e.message; }
+}
+async function refreshBackups() {
+  const box = document.getElementById('backupList'); box.innerHTML = '';
+  try {
+    const j = await (await fetch('/api/backups')).json();
+    if (!j.backups.length) { box.innerHTML = '<div class="meta">No backups yet.</div>'; return; }
+    j.backups.slice(0, 10).forEach(b => {
+      const row = document.createElement('div');
+      row.className = 'row'; row.style.cssText = 'justify-content:space-between; gap:8px; padding:6px 0; border-top:1px solid var(--border);';
+      row.innerHTML = '<span style="font-size:13px;">' + escapeHtml(b.time) + ' <span class="meta">' + escapeHtml(b.reason) + ' &middot; ' + b.channels + ' channels</span></span>';
+      const btn = document.createElement('button'); btn.className = 'secondary'; btn.style.cssText = 'padding:4px 10px; font-size:12px;'; btn.textContent = 'Restore';
+      btn.onclick = () => openRestore(b);
+      row.appendChild(btn); box.appendChild(row);
+    });
+  } catch (e) { box.innerHTML = '<div class="meta">Could not load the backup list.</div>'; }
+}
+
+let restoreRaw = null, restoreDevs = [];
+async function openRestore(b) {
+  if (!hasBrain) { document.getElementById('backupMsg').textContent = 'Load the channels from the Brain first.'; return; }
+  try { restoreRaw = await (await fetch('/api/backup?name=' + encodeURIComponent(b.name))).json(); }
+  catch (e) { document.getElementById('backupMsg').textContent = 'Could not read the backup.'; return; }
+  restoreDevs = extractDevicesFromRaw(restoreRaw);
+  const sel = document.getElementById('restoreDevice'); sel.innerHTML = '';
+  restoreDevs.forEach((d, i) => {
+    const nowDev = devices.find(x => x.roomKey === d.roomKey && x.deviceKey === d.deviceKey);
+    const nowN = nowDev ? channels.filter(c => c.roomKey === d.roomKey && c.deviceKey === d.deviceKey).length : null;
+    const bN = ((findDeviceInRaw(restoreRaw, d.roomKey, d.deviceKey) || {}).favorites || []).length;
+    const o = document.createElement('option'); o.value = i;
+    o.textContent = d.roomName + ' / ' + d.deviceName + ' - backup ' + bN + (nowN === null ? ' (device not on Brain)' : ', now ' + nowN);
+    if (nowN === null) o.disabled = true;
+    sel.appendChild(o);
+  });
+  document.getElementById('restoreInfo').textContent = 'Backup from ' + b.time + '. Pick the list to put back. Before restoring, the current state of the Brain is backed up too.';
+  document.getElementById('restoreMsg').textContent = '';
+  document.getElementById('restoreModal').style.display = 'flex';
+}
+function closeRestore() { document.getElementById('restoreModal').style.display = 'none'; }
+async function doRestore() {
+  const d = restoreDevs[document.getElementById('restoreDevice').value];
+  if (!d) return;
+  const favs = (findDeviceInRaw(restoreRaw, d.roomKey, d.deviceKey) || {}).favorites || [];
+  const m = document.getElementById('restoreMsg'), btn = document.getElementById('restoreBtn');
+  if (!confirm('Replace the current list of "' + d.deviceName + '" on the Brain with the ' + favs.length + ' channels from the backup?')) return;
+  btn.disabled = true; restoreRunning = true; m.textContent = 'Backing up current state...';
+  try {
+    const ip = document.getElementById('ipInput').value.trim();
+    const cur = await brainGetProject(ip);
+    await postBackup(JSON.stringify(cur), 'prerestore');
+    const curDev = findDeviceInRaw(cur, d.roomKey, d.deviceKey);
+    const oldLen = ((curDev || {}).favorites || []).length;
+    for (let i = 0; i < favs.length; i++) {
+      m.textContent = 'Restoring ' + (i + 1) + ' / ' + favs.length + ' ...';
+      await brainPostFavorite(ip, d.roomKey, d.deviceKey, i, favs[i].channel, favs[i].channelNr);
+    }
+    for (let i = oldLen - 1; i >= favs.length; i--) await brainDeleteFavoriteSlot(ip, d.roomKey, d.deviceKey, i);
+    m.textContent = 'Done. Reloading from the Brain...';
+    closeRestore(); closeSettings();
+    await loadFromBrain();
+  } catch (e) { m.textContent = 'Restore failed: ' + e.message; }
+  finally { btn.disabled = false; restoreRunning = false; }
+}
 function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
 async function checkUpdate(manual) {
   const t = document.getElementById('updText'), b = document.getElementById('updNowBtn');
@@ -1622,7 +1765,7 @@ async function doUpdate() {
     t.textContent = 'Restart takes longer than expected - reload the page manually.';
   } catch (e) { t.textContent = 'Update failed: ' + e; b.disabled = false; }
 }
-window.addEventListener('load', () => setTimeout(() => checkUpdate(false), 500));
+window.addEventListener('load', () => { loadSettings(); setTimeout(() => checkUpdate(false), 500); });
 </script>
 </body>
 </html>
@@ -1644,6 +1787,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/update-check":
             return self._json(update_check())
+        if self.path == "/api/settings":
+            return self._json(load_settings())
+        if self.path == "/api/backups":
+            return self._json({"backups": list_backups()})
+        if self.path.startswith("/api/backup?"):
+            q = parse_qs(urlparse(self.path).query)
+            return self._raw_json(read_backup((q.get("name") or [""])[0]))
         self.send_response(404)
         self.end_headers()
 
@@ -1655,6 +1805,16 @@ class Handler(BaseHTTPRequestHandler):
             if origin and origin.split("://", 1)[-1] != host:
                 return self._json({"ok": False, "error": "forbidden"}, 403)
             return self._json(apply_update())
+        if self.path.startswith("/api/settings") or self.path.startswith("/api/backup"):
+            origin = self.headers.get("Origin")
+            if origin and origin.split("://", 1)[-1] != self.headers.get("Host", ""):
+                return self._json({"ok": False, "error": "forbidden"}, 403)
+            n = min(int(self.headers.get("Content-Length") or 0), 30000000)
+            body = self.rfile.read(n)
+            q = parse_qs(urlparse(self.path).query)
+            if self.path.startswith("/api/settings"):
+                return self._json(save_settings(body))
+            return self._json(create_backup(body, (q.get("reason") or ["manual"])[0]))
         if self.path.startswith("/api/save-logo"):
             origin = self.headers.get("Origin")
             if origin and origin.split("://", 1)[-1] != self.headers.get("Host", ""):
@@ -1668,6 +1828,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(404)
         self.end_headers()
 
+    def _raw_json(self, text, code=200):
+        if text is None:
+            return self._json({"ok": False, "error": "not found"}, 404)
+        body = text.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
@@ -1676,6 +1847,95 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+def load_settings():
+    try:
+        with open(os.path.join(DATA_DIR, "settings.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        return {"brainIp": str(d.get("brainIp", "")) or "192.168.1.135"}
+    except Exception:
+        return {"brainIp": "192.168.1.135"}
+
+
+def save_settings(body):
+    try:
+        d = json.loads(body.decode("utf-8"))
+        ip = str(d.get("brainIp", "")).strip()
+    except Exception:
+        return {"ok": False, "error": "invalid data"}
+    if not re.fullmatch(r"(\d{1,3}\.){3}\d{1,3}", ip):
+        return {"ok": False, "error": "invalid IP address"}
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(os.path.join(DATA_DIR, "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"brainIp": ip}, f)
+    except OSError as e:
+        return {"ok": False, "error": str(e)[:100]}
+    return {"ok": True, "brainIp": ip}
+
+
+def _count_channels(raw):
+    n = 0
+    try:
+        proj = raw if "rooms" in raw else raw["project"]
+        for room in proj["rooms"].values():
+            for dev in (room.get("devices") or {}).values():
+                n += len(dev.get("favorites") or [])
+    except Exception:
+        pass
+    return n
+
+
+def create_backup(body, reason):
+    reason = re.sub(r"[^a-z]", "", reason.lower())[:12] or "manual"
+    try:
+        raw = json.loads(body.decode("utf-8"))
+        if not isinstance(raw, dict) or _count_channels(raw) == 0:
+            return {"ok": False, "error": "no channels in data"}
+    except Exception:
+        return {"ok": False, "error": "invalid data"}
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        name = time.strftime("%Y%m%d-%H%M%S") + "_" + reason + ".json"
+        with open(os.path.join(BACKUP_DIR, name), "wb") as f:
+            f.write(body)
+        files = sorted(x for x in os.listdir(BACKUP_DIR) if x.endswith(".json"))
+        for old in files[:-BACKUP_KEEP]:
+            os.remove(os.path.join(BACKUP_DIR, old))
+    except OSError as e:
+        return {"ok": False, "error": str(e)[:100]}
+    return {"ok": True, "name": name}
+
+
+def list_backups():
+    out = []
+    try:
+        files = sorted((x for x in os.listdir(BACKUP_DIR) if x.endswith(".json")), reverse=True)
+    except OSError:
+        return out
+    for name in files:
+        m = re.fullmatch(r"(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)(\d\d)_([a-z]+)\.json", name)
+        if not m:
+            continue
+        try:
+            with open(os.path.join(BACKUP_DIR, name), encoding="utf-8") as f:
+                n = _count_channels(json.load(f))
+        except Exception:
+            n = 0
+        out.append({"name": name, "channels": n, "reason": m.group(7),
+                    "time": "%s-%s-%s %s:%s" % m.groups()[:5]})
+    return out
+
+
+def read_backup(name):
+    if not re.fullmatch(r"\d{8}-\d{6}_[a-z]+\.json", name):
+        return None
+    try:
+        with open(os.path.join(BACKUP_DIR, name), encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return None
 
 
 def save_logo(name, ip, overwrite, data):
