@@ -38,7 +38,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 8642
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get(
@@ -212,9 +212,15 @@ PAGE = r"""<!DOCTYPE html>
     #saveAllBtn {
       position: fixed; left: 12px; right: 12px; z-index: 30;
       bottom: calc(12px + env(safe-area-inset-bottom));
-      flex: none !important; min-height: 48px; font-size: 16px;
-      opacity: 1 !important; /* stay solid so it doesn't look see-through over the list */
-      box-shadow: 0 4px 16px rgba(0,0,0,.5);
+      flex: none !important; min-height: 46px; font-size: 15px; font-weight: 600;
+      border-radius: 12px; letter-spacing: .2px;
+      background: var(--panel2) !important; color: var(--muted) !important;
+      border: 1px solid var(--border) !important;
+      opacity: 1 !important; box-shadow: 0 6px 20px rgba(0,0,0,.55);
+    }
+    #saveAllBtn.has-changes {
+      background: var(--green) !important; color: #06210f !important;
+      border-color: var(--green) !important;
     }
 
     /* Add-new-channel form: one field per line */
@@ -305,8 +311,8 @@ PAGE = r"""<!DOCTYPE html>
 </header>
 <div id="updBar" style="padding: 6px 24px; font-size: 12px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--border); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
   <span id="updText">Version __VERSION__</span>
-  <button id="updCheckBtn" type="button" onclick="checkUpdate(true)" style="padding:3px 10px; font-size:12px;">Check for updates</button>
-  <button id="updNowBtn" type="button" onclick="doUpdate()" style="padding:3px 10px; font-size:12px; display:none;">Update now</button>
+  <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)" style="padding:3px 10px; font-size:12px;">Check for updates</button>
+  <button id="updNowBtn" class="secondary" type="button" onclick="doUpdate()" style="padding:3px 10px; font-size:12px; display:none;">Update now</button>
 </div>
 <div style="padding: 8px 24px; font-size: 12px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--border);">
   Runs entirely in your browser - no server, no installation, no account. Requests go straight from this page to your Brain on your local network and nowhere else.
@@ -327,7 +333,7 @@ PAGE = r"""<!DOCTYPE html>
         <button class="secondary" onclick="openNrImport()" title="Paste a channel list (name + number) to correct many channel numbers at once">Update numbers</button>
         <button class="secondary" onclick="expandCollapseAll(true)">Collapse all</button>
         <button class="secondary" onclick="expandCollapseAll(false)">Expand all</button>
-        <button id="saveAllBtn" onclick="saveAllDirty()">&#128190; Save all changes (<span id="dirtyCount">0</span>)</button>
+        <button id="saveAllBtn" onclick="saveAllDirty()">Save all changes (<span id="dirtyCount">0</span>)</button>
       </div>
     </div>
 
@@ -632,7 +638,9 @@ function isDirty(ch) {
 function updateDirtyCount() {
   const n = channels.filter(isDirty).length;
   document.getElementById('dirtyCount').textContent = n;
-  document.getElementById('saveAllBtn').style.opacity = n === 0 ? '.6' : '1';
+  const sb = document.getElementById('saveAllBtn');
+  sb.style.opacity = n === 0 ? '.6' : '1';
+  sb.classList.toggle('has-changes', n > 0);
 }
 
 function populateDeviceDropdown() {
