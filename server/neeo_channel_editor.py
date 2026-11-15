@@ -70,6 +70,7 @@ CHANGELOG = [
     ("1.4.1", ["Icon for the browser tab and the iPhone home screen"]),
     ("1.4.2", ["Update notes: Settings shows what is new before you update"]),
     ("1.4.3", ["New icon: blue channel list on black"]),
+    ("1.4.4", ["Pop-up windows keep their title bar and close button visible while scrolling"]),
 ]
 
 # Browser / home-screen icons (original design: blue channel list on black).
@@ -80,7 +81,7 @@ ICONS = {
     "/icon-32.png": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADe0lEQVR42s2XTWwbRRTHfzO7jklMGtcONC2O5UggmqjQgpFQe6KnnOil0AP0htQLp4JUCS4gLiAk1AsHJLhUVGqrSqUgOFAkDkUQoVYKLR9SUN3EbUJK6w/UYCe2d+dx2LWx07XjQPPxpJHXu7P7f+/N//3nDXhm+b9J4ANgCqgABpD/OYz/rSn/28llmI2LQ8Ct+wC40rjlY7U4cbBpgnOfIg/KhNP0/2AdPAEUAias1agHWAASFvA2sN+/2UjJGpr2sfoApYDrQMp/qOqzlLIAQRAQQWmr+fEqTRDjtt7wbEYBNcBmY8xRTd7UQ0cpzc7xd4iPpJk88yqlfIbE0y+zNbkH48gqMiFoW1GYvsTclbPea9IKZy8HR4Sevhg7x99kYAfM/3KAzMXjpF86yZbt4FZXhY8dhsJMmflfP8c49ZeljQMioDSVco6r514jlkoz99MZQDHx8TjRxJNeBlR3HogYLFtRyE5inEojwJaY71mCdbYA8nk+2eEHCfXFWSxm/60fy14eQKApBcZ1AIW2LMQIIm43DihQYIX62HvkAvGRXXz/0Qvkfr/A4WOnGBndQ7ViUEp3SLtg24r8n3OceO8Q5YVixxWz7w1e0FaY/m1jRAb76R1IgILU6D6GH0tSWQKtOvIOy4KBwRQ94QjlhYKvPcGpCyxDRIgOP0P/w48zO3kaMS69kSixoSTGXakMBW0p7hbusFCcR2kLEUO7tWtDwvXjph3IIBFiqb30bxvlxuVPEdchHIkTGUxhjKC6EAIRQcSgteLv3DS1xWJgYG2FaN+Rb4gOR/juQ032x0947vWrRB/ZjlOFDhxsdcJ4QpSfzvDt+2MYt7aSEHlOuLVFijcvY4WeoJS/DsDtqa9xKk/hVgW1GiHq0eSuTXhlGCDFAYvt3bJCDxDqjbF094+mBKnumSF0xaN1YZtS2quE7spQo4BH9x8jnkpz5dxRFv+aZWjseaLDuzGO6UwCMWhbU8rNeCUsLp3kM4CEhp7IQ+w68C4DO+DOtR/IXDzOs698wZYhbzdUKwiR0uAswZdvTFDKZzpmIGA3VFTLeX776i3iI2nmf/4MgEsnXmRrcjdurTMJRbweoJTLUi5mAdUWfNPshk6QIHk9IA0Z/S89oRinq5YssCldY2s0pRo47wObdcy88THPb/jBZFMczTbF4XTDjuf/AGHcIO0lcVyuAAAAAElFTkSuQmCC"),
 }
 ICONS["/favicon.ico"] = ICONS["/icon-32.png"]
-APP_VERSION = "1.4.3"
+APP_VERSION = "1.4.4"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get("NEEO_UPDATE_URL")  # test override
@@ -118,6 +119,8 @@ PAGE = r"""<!DOCTYPE html>
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
     background: var(--panel);
   }
+  /* modal title bar stays visible (with the close button) while the content scrolls */
+  .modal-head { position: sticky; top: -20px; z-index: 5; background: var(--panel); margin: -20px -20px 10px -20px; padding: 16px 20px 10px 20px; border-bottom: 1px solid var(--border); }
   header { position: relative; }
   #gearBtn { position: absolute; top: 14px; right: 16px; width: 38px; height: 38px; padding: 0; font-size: 20px; line-height: 1; border-radius: 10px; }
   #gearDot { display: none; position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); }
@@ -420,8 +423,8 @@ PAGE = r"""<!DOCTYPE html>
 </main>
 
 <div id="settingsModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;" onclick="if(event.target===this) closeSettings()">
-  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:420px; max-width:92vw; max-height:85vh; overflow-y:auto;">
-    <div class="row" style="justify-content:space-between; margin-bottom:14px;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:420px; max-width:92vw; max-height:calc(100dvh - 40px); overflow-y:auto;">
+    <div class="row modal-head" style="justify-content:space-between;">
       <h3 style="margin:0; font-size:15px;">Settings</h3>
       <button class="secondary" onclick="closeSettings()" style="padding:4px 10px;">&times;</button>
     </div>
@@ -454,8 +457,8 @@ PAGE = r"""<!DOCTYPE html>
 </div>
 
 <div id="restoreModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:110; align-items:center; justify-content:center;">
-  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:420px; max-width:92vw; max-height:85vh; overflow-y:auto;">
-    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:420px; max-width:92vw; max-height:calc(100dvh - 40px); overflow-y:auto;">
+    <div class="row modal-head" style="justify-content:space-between;">
       <h3 style="margin:0; font-size:15px;">Restore from backup</h3>
       <button class="secondary" onclick="closeRestore()" style="padding:4px 10px;">&times;</button>
     </div>
@@ -469,8 +472,8 @@ PAGE = r"""<!DOCTYPE html>
 </div>
 
 <div id="nrImportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
-  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:760px; max-width:94vw; max-height:88vh; overflow-y:auto;">
-    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:760px; max-width:94vw; max-height:calc(100dvh - 40px); overflow-y:auto;">
+    <div class="row modal-head" style="justify-content:space-between;">
       <h3 style="margin:0; font-size:15px;">Update channel numbers from a list</h3>
       <button class="secondary" onclick="closeNrImport()" style="padding:4px 10px;">&times;</button>
     </div>
@@ -498,8 +501,8 @@ PAGE = r"""<!DOCTYPE html>
 </div>
 
 <div id="logoSearchModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
-  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:520px; max-width:92vw; max-height:80vh; overflow-y:auto;">
-    <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:520px; max-width:92vw; max-height:calc(100dvh - 40px); overflow-y:auto;">
+    <div class="row modal-head" style="justify-content:space-between;">
       <h3 style="margin:0; font-size:15px;">Find a logo</h3>
       <button class="secondary" onclick="closeLogoSearch()" style="padding:4px 10px;">&times;</button>
     </div>
