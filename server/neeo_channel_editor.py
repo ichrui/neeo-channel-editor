@@ -47,7 +47,7 @@ BRAIN_SSH_KEY = os.environ.get("NEEO_BRAIN_KEY", os.path.expanduser("~/.ssh/neeo
 BRAIN_SSH_USER = os.environ.get("NEEO_BRAIN_USER", "neeo")
 BRAIN_PICS_DIR = os.environ.get("NEEO_PICS_DIR", "/opt/mobile/eui/pics")
 SSH_BIN = os.environ.get("NEEO_SSH_BIN", "ssh")
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get(
@@ -1298,8 +1298,6 @@ function renderLogoCandidates(items, resultsEl) {
       <canvas width="${LOGO_CANVAS_SIZE}" height="${LOGO_CANVAS_SIZE}" style="width:100px; height:100px; background:repeating-conic-gradient(#2a2f3a 0% 25%, #1e222b 0% 50%) 50% / 16px 16px; border-radius:6px;"></canvas>
       <div class="row" style="justify-content:center; margin-top:8px; gap:6px;">
         <button style="padding:5px 8px; font-size:12px;" onclick="saveLogoToBrain(this)" title="Save as PNG directly on your Brain and fill in the link">Save to Brain</button>
-        <button class="secondary" style="padding:5px 8px; font-size:12px;" onclick="useLogoCandidate(this)" title="Use the original ${escapeAttr(item.source)} URL directly (external link)">Use URL</button>
-        <button class="secondary" style="padding:5px 8px; font-size:12px;" onclick="downloadLogoCandidate(this, '${escapeAttr(item.fileTitle).replace(/'/g, "\\'")}')" title="Download a square 256x256 PNG to upload to your Brain yourself">Download PNG</button>
       </div>
     `;
     resultsEl.appendChild(card);
@@ -1335,7 +1333,7 @@ async function runLogoSearch() {
       ? 'Error while searching: ' + wikiError.message
       : 'No image results found for "' + query + '". Try a different or shorter name.';
   } else {
-    statusEl.textContent = total + ' result(s) (' + ghItems.length + ' GitHub, ' + wikiItems.length + ' Wikipedia) - click "Save to Brain" on the one that matches, (or "Use URL" for the external link).' +
+    statusEl.textContent = total + ' result(s) (' + ghItems.length + ' GitHub, ' + wikiItems.length + ' Wikipedia) - click "Save to Brain" on the one that matches.' +
       (wikiError ? ' Wikipedia could not be reached.' : '');
   }
 }
@@ -1358,14 +1356,6 @@ function loadIntoCanvas(imageUrl, canvas) {
     canvas.dataset.ready = '0';
   };
   img.src = imageUrl;
-}
-
-function useLogoCandidate(btnEl) {
-  const card = btnEl.closest('[data-source-url]');
-  if (!logoSearchTargetInputs || !card) return;
-  logoSearchTargetInputs.logoInput.value = card.dataset.sourceUrl;
-  logoSearchTargetInputs.logoInput.dispatchEvent(new Event('input', {bubbles: true}));
-  closeLogoSearch();
 }
 
 async function saveLogoToBrain(btnEl, overwrite) {
@@ -1400,24 +1390,6 @@ async function saveLogoToBrain(btnEl, overwrite) {
     setStatus('Logo saved on the Brain: ' + j.url + ' - remember to save the channel.', 'ok');
   } catch (e) { statusEl.textContent = 'Save failed: ' + e; btnEl.disabled = false; }
 }
-
-function downloadLogoCandidate(btnEl, titleForFilename) {
-  const card = btnEl.closest('[data-source-url]');
-  const canvas = card ? card.querySelector('canvas') : null;
-  if (!canvas) return;
-  try {
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
-    const safeName = (titleForFilename || 'logo').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
-    a.download = safeName + '.png';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  } catch (e) {
-    setStatus('Could not export this image as PNG (cross-origin restriction from the image source).', 'err');
-  }
-}
-
 
 // ---------------------------------------------------------------------
 // Update channel numbers from a pasted list (name + new number).
