@@ -71,6 +71,7 @@ CHANGELOG = [
     ("1.4.2", ["Update notes: Settings shows what is new before you update"]),
     ("1.4.3", ["New icon: blue channel list on black"]),
     ("1.4.4", ["Pop-up windows keep their title bar and close button visible while scrolling"]),
+    ("1.4.5", ["Pop-up windows start at the top of the screen so the title bar is not hidden under the browser bar"]),
 ]
 
 # Browser / home-screen icons (original design: blue channel list on black).
@@ -81,7 +82,7 @@ ICONS = {
     "/icon-32.png": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADe0lEQVR42s2XTWwbRRTHfzO7jklMGtcONC2O5UggmqjQgpFQe6KnnOil0AP0htQLp4JUCS4gLiAk1AsHJLhUVGqrSqUgOFAkDkUQoVYKLR9SUN3EbUJK6w/UYCe2d+dx2LWx07XjQPPxpJHXu7P7f+/N//3nDXhm+b9J4ANgCqgABpD/OYz/rSn/28llmI2LQ8Ct+wC40rjlY7U4cbBpgnOfIg/KhNP0/2AdPAEUAias1agHWAASFvA2sN+/2UjJGpr2sfoApYDrQMp/qOqzlLIAQRAQQWmr+fEqTRDjtt7wbEYBNcBmY8xRTd7UQ0cpzc7xd4iPpJk88yqlfIbE0y+zNbkH48gqMiFoW1GYvsTclbPea9IKZy8HR4Sevhg7x99kYAfM/3KAzMXjpF86yZbt4FZXhY8dhsJMmflfP8c49ZeljQMioDSVco6r514jlkoz99MZQDHx8TjRxJNeBlR3HogYLFtRyE5inEojwJaY71mCdbYA8nk+2eEHCfXFWSxm/60fy14eQKApBcZ1AIW2LMQIIm43DihQYIX62HvkAvGRXXz/0Qvkfr/A4WOnGBndQ7ViUEp3SLtg24r8n3OceO8Q5YVixxWz7w1e0FaY/m1jRAb76R1IgILU6D6GH0tSWQKtOvIOy4KBwRQ94QjlhYKvPcGpCyxDRIgOP0P/w48zO3kaMS69kSixoSTGXakMBW0p7hbusFCcR2kLEUO7tWtDwvXjph3IIBFiqb30bxvlxuVPEdchHIkTGUxhjKC6EAIRQcSgteLv3DS1xWJgYG2FaN+Rb4gOR/juQ032x0947vWrRB/ZjlOFDhxsdcJ4QpSfzvDt+2MYt7aSEHlOuLVFijcvY4WeoJS/DsDtqa9xKk/hVgW1GiHq0eSuTXhlGCDFAYvt3bJCDxDqjbF094+mBKnumSF0xaN1YZtS2quE7spQo4BH9x8jnkpz5dxRFv+aZWjseaLDuzGO6UwCMWhbU8rNeCUsLp3kM4CEhp7IQ+w68C4DO+DOtR/IXDzOs698wZYhbzdUKwiR0uAswZdvTFDKZzpmIGA3VFTLeX776i3iI2nmf/4MgEsnXmRrcjdurTMJRbweoJTLUi5mAdUWfNPshk6QIHk9IA0Z/S89oRinq5YssCldY2s0pRo47wObdcy88THPb/jBZFMczTbF4XTDjuf/AGHcIO0lcVyuAAAAAElFTkSuQmCC"),
 }
 ICONS["/favicon.ico"] = ICONS["/icon-32.png"]
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.5"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get("NEEO_UPDATE_URL")  # test override
@@ -259,6 +260,11 @@ PAGE = r"""<!DOCTYPE html>
     #searchInput { width: 100% !important; }
     .toolbar > .row:last-child button { flex: 1 1 calc(50% - 10px); min-height: 38px; font-size: 14px; padding: 6px 8px; }
     header + div { display: none; } /* long explanation banner */
+
+    /* Pop-up windows: start at the top of the visible area and never be taller
+       than it (centering made them poke out under the browser's address bar) */
+    #logoSearchModal, #settingsModal, #restoreModal, #nrImportModal { align-items: flex-start !important; padding: 12px 0; }
+    #logoSearchModal > div, #settingsModal > div, #restoreModal > div, #nrImportModal > div { max-height: calc(100% - 24px) !important; }
 
     /* Save-all button stays reachable at the bottom of the screen */
     #saveAllBtn {
