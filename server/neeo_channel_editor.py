@@ -38,7 +38,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 8642
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.1.2"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get(
@@ -94,11 +94,11 @@ PAGE = r"""<!DOCTYPE html>
     background: var(--accent); color: white; border: none; padding: 8px 14px;
     border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;
   }
-  button:hover { background: var(--accent2); }
+  @media (hover: hover) { button:hover { background: var(--accent2); } }
   button.secondary { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
-  button.secondary:hover { background: #262b36; }
+  @media (hover: hover) { button.secondary:hover { background: #262b36; } }
   button.danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
-  button.danger:hover { background: var(--red); color: white; }
+  @media (hover: hover) { button.danger:hover { background: var(--red); color: white; } }
   button:disabled { opacity: .5; cursor: not-allowed; }
   label { color: var(--muted); font-size: 13px; }
 
