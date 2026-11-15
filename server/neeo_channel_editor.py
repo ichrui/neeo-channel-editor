@@ -47,7 +47,7 @@ BRAIN_SSH_KEY = os.environ.get("NEEO_BRAIN_KEY", os.path.expanduser("~/.ssh/neeo
 BRAIN_SSH_USER = os.environ.get("NEEO_BRAIN_USER", "neeo")
 BRAIN_PICS_DIR = os.environ.get("NEEO_PICS_DIR", "/opt/mobile/eui/pics")
 SSH_BIN = os.environ.get("NEEO_SSH_BIN", "ssh")
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get(
@@ -203,8 +203,8 @@ PAGE = r"""<!DOCTYPE html>
   @media (max-width: 700px) {
     body { font-size: 15px; }
     header { padding: calc(12px + env(safe-area-inset-top)) 12px 12px 12px; gap: 10px; }
-    header h1 { font-size: 16px; margin-right: 0; width: 100%; white-space: normal; padding-right: 48px; }
-    #gearBtn { top: calc(8px + env(safe-area-inset-top)); right: 12px; }
+    header h1 { font-size: 16px; margin-right: 0; width: 100%; white-space: normal; padding-right: 48px; min-height: 38px; display: flex; align-items: center; }
+    #gearBtn { top: calc(12px + env(safe-area-inset-top)); right: 12px; }
     header .row { width: 100%; flex-wrap: nowrap; }
     header .row label { flex: none; }
     #ipInput { flex: 1; min-width: 0; width: auto !important; }
@@ -316,7 +316,7 @@ PAGE = r"""<!DOCTYPE html>
 
 <header>
   <h1>&#128225; NEEO Channel Editor</h1>
-  <button id="gearBtn" class="secondary" type="button" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;<span id="gearDot"></span></button>
+  <button id="gearBtn" class="secondary" type="button" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;&#xFE0E;<span id="gearDot"></span></button>
   <div class="row">
     <label>Brain IP</label>
     <input type="text" id="ipInput" value="192.168.1.135" placeholder="192.168.1.135" style="width:140px" onkeydown="if(event.key==='Enter') loadFromBrain()">
