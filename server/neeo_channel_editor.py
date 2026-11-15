@@ -30,15 +30,24 @@ import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
 import urllib.request
+from urllib.parse import urlparse, parse_qs
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 8642
-APP_VERSION = "1.1.2"
+# Saving logos on the Brain: the editor copies PNG files into the Brain's
+# logo folder over SSH (key file, no password). The Brain serves that folder at
+# http://<brain>:3200/eui/pics/
+BRAIN_SSH_KEY = os.environ.get("NEEO_BRAIN_KEY", os.path.expanduser("~/.ssh/neeoblackbrainkey.id_rsa"))
+BRAIN_SSH_USER = os.environ.get("NEEO_BRAIN_USER", "neeo")
+BRAIN_PICS_DIR = os.environ.get("NEEO_PICS_DIR", "/opt/mobile/eui/pics")
+SSH_BIN = os.environ.get("NEEO_SSH_BIN", "ssh")
+APP_VERSION = "1.2.0"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get(
@@ -413,6 +422,11 @@ PAGE = r"""<!DOCTYPE html>
     <div class="row" style="margin-bottom:12px;">
       <input type="text" id="logoSearchQuery" style="width:280px" onkeydown="if(event.key==='Enter') runLogoSearch()">
       <button onclick="runLogoSearch()">Search</button>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <label>File name on Brain</label>
+      <input type="text" id="logoFileName" style="width:160px" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <span class="meta">.png</span>
     </div>
     <div id="logoSearchStatus" class="meta"></div>
     <div id="logoSearchResults" style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:10px;"></div>
@@ -1173,10 +1187,15 @@ let logoSearchTargetInputs = null; // {nameInput, logoInput} currently being edi
 function openLogoSearch(nameInput, logoInput) {
   logoSearchTargetInputs = {nameInput, logoInput};
   document.getElementById('logoSearchQuery').value = nameInput.value.trim();
+  document.getElementById('logoFileName').value = brainFileName(nameInput.value);
   document.getElementById('logoSearchResults').innerHTML = '';
   document.getElementById('logoSearchStatus').textContent = '';
   document.getElementById('logoSearchModal').style.display = 'flex';
   if (nameInput.value.trim()) runLogoSearch();
+}
+
+function brainFileName(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_-]/g, '');
 }
 
 function closeLogoSearch() {
@@ -1278,7 +1297,8 @@ function renderLogoCandidates(items, resultsEl) {
       <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">${escapeHtml(item.source)}</div>
       <canvas width="${LOGO_CANVAS_SIZE}" height="${LOGO_CANVAS_SIZE}" style="width:100px; height:100px; background:repeating-conic-gradient(#2a2f3a 0% 25%, #1e222b 0% 50%) 50% / 16px 16px; border-radius:6px;"></canvas>
       <div class="row" style="justify-content:center; margin-top:8px; gap:6px;">
-        <button style="padding:5px 8px; font-size:12px;" onclick="useLogoCandidate(this)" title="Use the original ${escapeAttr(item.source)} URL directly (external link)">Use URL</button>
+        <button style="padding:5px 8px; font-size:12px;" onclick="saveLogoToBrain(this)" title="Save as PNG directly on your Brain and fill in the link">Save to Brain</button>
+        <button class="secondary" style="padding:5px 8px; font-size:12px;" onclick="useLogoCandidate(this)" title="Use the original ${escapeAttr(item.source)} URL directly (external link)">Use URL</button>
         <button class="secondary" style="padding:5px 8px; font-size:12px;" onclick="downloadLogoCandidate(this, '${escapeAttr(item.fileTitle).replace(/'/g, "\\'")}')" title="Download a square 256x256 PNG to upload to your Brain yourself">Download PNG</button>
       </div>
     `;
@@ -1315,7 +1335,7 @@ async function runLogoSearch() {
       ? 'Error while searching: ' + wikiError.message
       : 'No image results found for "' + query + '". Try a different or shorter name.';
   } else {
-    statusEl.textContent = total + ' result(s) (' + ghItems.length + ' GitHub, ' + wikiItems.length + ' Wikipedia) - click "Use URL" on the one that matches, or download it as PNG.' +
+    statusEl.textContent = total + ' result(s) (' + ghItems.length + ' GitHub, ' + wikiItems.length + ' Wikipedia) - click "Save to Brain" on the one that matches, (or "Use URL" for the external link).' +
       (wikiError ? ' Wikipedia could not be reached.' : '');
   }
 }
@@ -1346,6 +1366,39 @@ function useLogoCandidate(btnEl) {
   logoSearchTargetInputs.logoInput.value = card.dataset.sourceUrl;
   logoSearchTargetInputs.logoInput.dispatchEvent(new Event('input', {bubbles: true}));
   closeLogoSearch();
+}
+
+async function saveLogoToBrain(btnEl, overwrite) {
+  const card = btnEl.closest('[data-source-url]');
+  const canvas = card ? card.querySelector('canvas') : null;
+  const slug = brainFileName(document.getElementById('logoFileName').value);
+  const statusEl = document.getElementById('logoSearchStatus');
+  if (!canvas || !logoSearchTargetInputs) return;
+  if (!slug) { statusEl.textContent = 'Enter a file name first.'; return; }
+  const ip = document.getElementById('ipInput').value.trim();
+  let blob;
+  try {
+    blob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error('empty')), 'image/png'));
+  } catch (e) {
+    statusEl.textContent = 'Could not convert this image to PNG (cross-origin restriction). Try another result.';
+    return;
+  }
+  btnEl.disabled = true; statusEl.textContent = 'Saving ' + slug + '.png on the Brain...';
+  try {
+    const r = await fetch('/api/save-logo?name=' + encodeURIComponent(slug) + '&ip=' + encodeURIComponent(ip) + (overwrite ? '&overwrite=1' : ''), { method: 'POST', body: blob });
+    const j = await r.json();
+    if (j.exists) {
+      btnEl.disabled = false;
+      if (confirm(slug + '.png already exists on the Brain. Overwrite it?')) return saveLogoToBrain(btnEl, true);
+      statusEl.textContent = 'Not saved - file already exists. Change the file name or overwrite.';
+      return;
+    }
+    if (!j.ok) { statusEl.textContent = 'Save failed: ' + j.error; btnEl.disabled = false; return; }
+    logoSearchTargetInputs.logoInput.value = j.url;
+    logoSearchTargetInputs.logoInput.dispatchEvent(new Event('input', {bubbles: true}));
+    closeLogoSearch();
+    setStatus('Logo saved on the Brain: ' + j.url + ' - remember to save the channel.', 'ok');
+  } catch (e) { statusEl.textContent = 'Save failed: ' + e; btnEl.disabled = false; }
 }
 
 function downloadLogoCandidate(btnEl, titleForFilename) {
@@ -1609,6 +1662,16 @@ class Handler(BaseHTTPRequestHandler):
             if origin and origin.split("://", 1)[-1] != host:
                 return self._json({"ok": False, "error": "forbidden"}, 403)
             return self._json(apply_update())
+        if self.path.startswith("/api/save-logo"):
+            origin = self.headers.get("Origin")
+            if origin and origin.split("://", 1)[-1] != self.headers.get("Host", ""):
+                return self._json({"ok": False, "error": "forbidden"}, 403)
+            q = parse_qs(urlparse(self.path).query)
+            n = min(int(self.headers.get("Content-Length") or 0), 3000000)
+            data = self.rfile.read(n)
+            return self._json(save_logo(
+                (q.get("name") or [""])[0], (q.get("ip") or [""])[0],
+                (q.get("overwrite") or ["0"])[0] == "1", data))
         self.send_response(404)
         self.end_headers()
 
@@ -1620,6 +1683,35 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+def save_logo(name, ip, overwrite, data):
+    if not re.fullmatch(r"[a-z0-9_-]{1,60}", name):
+        return {"ok": False, "error": "invalid file name"}
+    if not re.fullmatch(r"(10|192\.168|172\.(1[6-9]|2\d|3[01]))(\.\d{1,3}){2,3}", ip):
+        return {"ok": False, "error": "invalid Brain IP"}
+    if not data.startswith(b"\x89PNG\r\n\x1a\n") or len(data) < 100:
+        return {"ok": False, "error": "not a PNG image"}
+    if not os.path.isfile(BRAIN_SSH_KEY):
+        return {"ok": False, "error": "SSH key not found: " + BRAIN_SSH_KEY}
+    d, f = BRAIN_PICS_DIR, name + ".png"
+    remote = (
+        f'cd "{d}" || exit 3; '
+        f'if [ -e "{f}" ] && [ "{int(overwrite)}" != "1" ]; then cat >/dev/null; echo EXISTS; exit 0; fi; '
+        f'cat > ".{name}.tmp" && chmod 644 ".{name}.tmp" && mv ".{name}.tmp" "{f}" && echo OK'
+    )
+    cmd = [SSH_BIN, "-i", BRAIN_SSH_KEY, "-o", "BatchMode=yes", "-o", "ConnectTimeout=8",
+           "-o", "StrictHostKeyChecking=accept-new", f"{BRAIN_SSH_USER}@{ip}", remote]
+    try:
+        r = subprocess.run(cmd, input=data, capture_output=True, timeout=30)
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+    out = r.stdout.decode("utf-8", "replace").strip()
+    if out.endswith("EXISTS"):
+        return {"ok": False, "exists": True}
+    if r.returncode == 0 and out.endswith("OK"):
+        return {"ok": True, "url": f"http://{ip}:3200/eui/pics/{f}"}
+    return {"ok": False, "error": (r.stderr.decode("utf-8", "replace").strip() or "ssh failed (code %d)" % r.returncode)[:160]}
 
 
 def _vt(v):

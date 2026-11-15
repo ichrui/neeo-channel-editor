@@ -6,3 +6,9 @@ It is optimised for the iPhone and can update itself: the page shows the install
 
 Run: `python3 neeo_channel_editor.py`  
 Updates: bump `APP_VERSION` in the script and push to `main`; press **Update now** in the page.
+
+## Saving logos on the Brain
+"Save to Brain" in the logo search copies the 256x256 PNG into the Brain's logo folder
+(`/opt/mobile/eui/pics`, served at `http://<brain>:3200/eui/pics/`) over SSH with a key file
+(default `~/.ssh/neeoblackbrainkey.id_rsa`, user `neeo`; override with `NEEO_BRAIN_KEY`, `NEEO_BRAIN_USER`)
+and fills in the logo link. File name = channel name, lowercase, no spaces (editable).
