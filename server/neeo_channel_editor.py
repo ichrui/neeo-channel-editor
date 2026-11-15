@@ -26,6 +26,7 @@ most Brains, but it isn't guaranteed by NEEO. So: test with a single,
 unimportant channel first, before making larger changes.
 """
 
+import ast
 import json
 import os
 import re
@@ -52,6 +53,24 @@ DATA_DIR = os.environ.get("NEEO_EDITOR_DIR", os.path.expanduser("~/.neeo-channel
 BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 BACKUP_KEEP = 40
 
+# What changed in each version. Shown in Settings when an update is available.
+# Add a new entry at the end for every release (newest last).
+CHANGELOG = [
+    ("1.1.0", ["Update button inside the page (the server updates itself from GitHub)",
+               "Fix: the \"Find a logo\" window no longer overflows on iPhone"]),
+    ("1.1.1", ["Calmer Save button: grey when nothing changed, green when there are changes"]),
+    ("1.1.2", ["Buttons no longer keep the dark hover colour after a tap on iPhone"]),
+    ("1.2.0", ["\"Save to Brain\": saves the logo as PNG directly on the Brain and fills in the link"]),
+    ("1.2.1", ["Logo search offers only \"Save to Brain\" (Use URL and Download removed)"]),
+    ("1.3.0", ["Settings (gear, top right); the update moved there, yellow dot when an update is waiting"]),
+    ("1.3.1", ["Gear button no longer overlaps \"Load from Brain\""]),
+    ("1.3.2", ["Updates are found immediately after a release (no 5-minute wait)"]),
+    ("1.4.0", ["Brain IP is set in Settings and remembered on the server",
+               "Automatic backup before the first change; backup and restore of channel lists in Settings"]),
+    ("1.4.1", ["Icon for the browser tab and the iPhone home screen"]),
+    ("1.4.2", ["Update notes: Settings shows what is new before you update"]),
+]
+
 # Browser / home-screen icons (original design: signal + channel list).
 import base64
 ICONS = {
@@ -60,7 +79,7 @@ ICONS = {
     "/icon-32.png": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAFj0lEQVR42qWXTWxc1RXHf+fe997M+DOx40zGdhIbERIaSIFQCkKIBroAiVCVoEZl1SLYoKoVWXVXIdpKrBCo3YGqbloBoUUCIhWk1gptqhDapmA1pA6x8+EY7PhjsMeeeR/3sHhjx5CxZ4ZcaaRZvHvO/57//3wJ6bFAUihct80ZfgY8hOoA4APCtR0FIkTGgLeM44WJibPnl33K8p9878APBPMiRvKooqrrmxVBqtgUhTrfiwiIgNPPFPfTzy6NvQpYAejpGzzgiTmsqeMEMGu9XMQA4JIQl4QAGBtgbJCCUbdeJJyIWBEhVvfo1Pjo69LXd31/7JIPxcgGTW/btV9hSMIFXBKT7ewns2ErAJXiRcpzFxBr8YL29UAAJCJi1OmcZ+weL3bxITF2o6pL6jmPK0U6+u9k+3d+TsfWO1d97pgff59zQ89RPP93bKYT1gZhVTURYzbGLj4km3sHzxqRgSrna4TdEleKFPY+yc7v/YrLHw9x8dhvKE2eAqClZyf9dz1Fz+7vMvLWM4wf/y1eppOUzdp0iAhOdUzyhcEIwVtfQQYXlthw3T6C9jwTJ16mZ/f36d61HxFh+vTbTH50mMLeHxEtzTF75l1M0LpeFJZVEUu+d1AbSiYRXFQmLs+y++Ar5G/Zz/Tpf4A6unfew+TwOwz/4RG8bAfGz9XNihWzDQOoUuGSkPbeW4kWZ/h8/AQCtPXeRtCWZ378XxgbrBf6awOwIsZykaC9wI0HfocYy6nXH6dcPI+f3VAvA646pum6JgZVx+abD7Jp1166b7iF/J7HUr6leXNe03VVE6yfY2bkL8yOPooYy/T/j2D8lqZf/7UoWC1I67eACElYwvjZhoV3TRGohgHj51AXpzz6ufop1zwAQYxZcbgcXmNM2lhSz6vK/JpFFOfcms3NW8u5akK8VARVxPpYvxURKJVKhGF4BURdtoTW1laMMY0CkKrQWti0az82yLI0Pcb8xeOECdxxx7fYcf0Owqg+CCOGpfISQ0NDlMuVmiC8q7PMEi/OMrDvFwze/2PipbRBHHtxH/0dixx+7TVyuQzO1ReccwktWY9fP/c8zz77S7q6ukiSpF4EFDEei1OnWJycRtUSzn+KRkU+nw85efIk27ZtJYqidSOQUq4EQcDIyAie59XUwZppqEmI37YF6/mEi3NoVCJ2QjaboaurC+dcQ/yHYcjU1BRBEDQnQkRYmh6p0uLhZTvxrbCwMM/s7ExjItTUVEtLaxNpKILGFXLdOyjc/jg2yFKaHGHig5dwznH3PfexpdBHHMd1KRCBJEk4/s+jzM5M16TBq9XxorBE37d/wsB9B4gW0nSfOfsere4SDz/yWDqGaiMidLS1taOqvPnnV/B9vz4A1GH9HJMf/ZFMRw/Gy7B4+SxhcZTIRRz92zvktxSqEagfflVl+MN/4wdBMyIUXFIBl6SUqMN6WRQhjqJqhWyk7qd3jbFY69W846HEtUcyxXg5xBpcVFl5krEWz/cbbDyCcwnOJbUBK7GnwoXVQ2k6epfo2vEA2+89hJiApZlzjBw5hHFlHnz4h/RszpPEMetyoCua5q/vHuGTM6cJrtCQDqXoBU9U30DM06DpWC4GF5fpuuFBNu26mXAROrfvZOy9flqSS9x2+11IldvGRNjG+XOjnP54mEwms3zPgVhR98bVi4mI1SQiaC+Q33OwmoZnuPy/P+EUvnHTN8lv6a0fgbSfEscR//3PCRYW5rHWoqpfWkxqrGYuAWPUhZJUStVCZLCZjnQLqpRxzq3shfVrkZLJZDHGKKgTMV9ezb66nIqRvKqmkhN7xYxLVuaB5ueX1J4RQb+ynNrlaaI0Pzfc3rbxVSco0I1qO+oM6mS14qsLbDO/5fX8E4XfG+WJTydGjy0//AvR5uawMCrfigAAAABJRU5ErkJggg=="),
 }
 ICONS["/favicon.ico"] = ICONS["/icon-32.png"]
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get("NEEO_UPDATE_URL")  # test override
@@ -429,6 +448,7 @@ PAGE = r"""<!DOCTYPE html>
       <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)">Check for updates</button>
       <button id="updNowBtn" type="button" onclick="doUpdate()" style="display:none;">Update now</button>
     </div>
+    <div id="updNotes" style="display:none; margin-top:10px; font-size:13px; border-top:1px solid var(--border); padding-top:8px;"></div>
   </div>
 </div>
 
@@ -1756,8 +1776,13 @@ async function checkUpdate(manual) {
       t.textContent = 'Version ' + j.current + ' - new version ' + j.latest + ' available';
       t.style.color = 'var(--yellow)'; b.style.display = '';
       document.getElementById('gearDot').classList.add('on');
+      const nb = document.getElementById('updNotes');
+      nb.innerHTML = '<div style="color:var(--muted); font-size:12px; margin-bottom:4px;">What is new</div>' +
+        (j.notes || []).slice().reverse().map(n => '<div style="margin-top:6px;"><b>' + escapeHtml(n.version) + '</b><ul style="margin:2px 0 0; padding-left:18px;">' +
+          n.items.map(x => '<li>' + escapeHtml(x) + '</li>').join('') + '</ul></div>').join('');
+      nb.style.display = (j.notes && j.notes.length) ? '' : 'none';
     } else {
-      t.textContent = 'Version ' + j.current + ' - up to date'; t.style.color = ''; b.style.display = 'none';
+      t.textContent = 'Version ' + j.current + ' - up to date'; t.style.color = ''; b.style.display = 'none'; document.getElementById('updNotes').style.display = 'none';
       document.getElementById('gearDot').classList.remove('on');
     }
   } catch (e) { t.textContent = 'Version (check failed)'; }
@@ -2019,21 +2044,31 @@ def fetch_remote():
     m = re.search(r'^APP_VERSION = "([\d.]+)"', text, re.M)
     if not m or "PAGE = r" not in text:
         raise ValueError("downloaded file is not a valid editor script")
-    compile(text, "neeo_channel_editor.py", "exec")  # syntax check
-    return text, m.group(1)
+    tree = ast.parse(text)  # syntax check
+    notes = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "CHANGELOG" for t in node.targets):
+            try:
+                notes = [(str(v), [str(x) for x in items]) for v, items in ast.literal_eval(node.value)]
+            except Exception:
+                notes = []
+    return text, m.group(1), notes
 
 
 def update_check():
     try:
-        _, latest = fetch_remote()
-        return {"current": APP_VERSION, "latest": latest, "available": _vt(latest) > _vt(APP_VERSION)}
+        _, latest, notes = fetch_remote()
+        new = [{"version": v, "items": items} for v, items in notes
+               if _vt(APP_VERSION) < _vt(v) <= _vt(latest)]
+        return {"current": APP_VERSION, "latest": latest,
+                "available": _vt(latest) > _vt(APP_VERSION), "notes": new}
     except Exception as e:
         return {"current": APP_VERSION, "error": str(e)[:120]}
 
 
 def apply_update():
     try:
-        text, latest = fetch_remote()
+        text, latest, _ = fetch_remote()
         if _vt(latest) <= _vt(APP_VERSION):
             return {"ok": False, "error": "already up to date"}
         path = os.path.abspath(__file__)
