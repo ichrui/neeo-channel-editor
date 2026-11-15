@@ -47,7 +47,7 @@ BRAIN_SSH_KEY = os.environ.get("NEEO_BRAIN_KEY", os.path.expanduser("~/.ssh/neeo
 BRAIN_SSH_USER = os.environ.get("NEEO_BRAIN_USER", "neeo")
 BRAIN_PICS_DIR = os.environ.get("NEEO_PICS_DIR", "/opt/mobile/eui/pics")
 SSH_BIN = os.environ.get("NEEO_SSH_BIN", "ssh")
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get(
@@ -83,6 +83,10 @@ PAGE = r"""<!DOCTYPE html>
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
     background: var(--panel);
   }
+  header { position: relative; }
+  #gearBtn { position: absolute; top: 14px; right: 16px; width: 38px; height: 38px; padding: 0; font-size: 20px; line-height: 1; border-radius: 10px; }
+  #gearDot { display: none; position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); }
+  #gearDot.on { display: block; }
   header h1 { font-size: 17px; margin: 0; margin-right: 12px; white-space: nowrap; }
   .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
   .pill.ok { color: var(--green); border-color: var(--green); }
@@ -199,7 +203,8 @@ PAGE = r"""<!DOCTYPE html>
   @media (max-width: 700px) {
     body { font-size: 15px; }
     header { padding: calc(12px + env(safe-area-inset-top)) 12px 12px 12px; gap: 10px; }
-    header h1 { font-size: 16px; margin-right: 0; width: 100%; white-space: normal; }
+    header h1 { font-size: 16px; margin-right: 0; width: 100%; white-space: normal; padding-right: 48px; }
+    #gearBtn { top: calc(8px + env(safe-area-inset-top)); right: 12px; }
     header .row { width: 100%; flex-wrap: nowrap; }
     header .row label { flex: none; }
     #ipInput { flex: 1; min-width: 0; width: auto !important; }
@@ -311,6 +316,7 @@ PAGE = r"""<!DOCTYPE html>
 
 <header>
   <h1>&#128225; NEEO Channel Editor</h1>
+  <button id="gearBtn" class="secondary" type="button" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;<span id="gearDot"></span></button>
   <div class="row">
     <label>Brain IP</label>
     <input type="text" id="ipInput" value="192.168.1.135" placeholder="192.168.1.135" style="width:140px" onkeydown="if(event.key==='Enter') loadFromBrain()">
@@ -318,11 +324,6 @@ PAGE = r"""<!DOCTYPE html>
   </div>
   <span class="pill" id="sourcePill">nothing loaded</span>
 </header>
-<div id="updBar" style="padding: 6px 24px; font-size: 12px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--border); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-  <span id="updText">Version __VERSION__</span>
-  <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)" style="padding:3px 10px; font-size:12px;">Check for updates</button>
-  <button id="updNowBtn" class="secondary" type="button" onclick="doUpdate()" style="padding:3px 10px; font-size:12px; display:none;">Update now</button>
-</div>
 <div style="padding: 8px 24px; font-size: 12px; color: var(--muted); background: var(--panel); border-bottom: 1px solid var(--border);">
   Runs entirely in your browser - no server, no installation, no account. Requests go straight from this page to your Brain on your local network and nowhere else.
 </div>
@@ -383,6 +384,23 @@ PAGE = r"""<!DOCTYPE html>
     </div>
   </div>
 </main>
+
+<div id="settingsModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;" onclick="if(event.target===this) closeSettings()">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:420px; max-width:92vw; max-height:85vh; overflow-y:auto;">
+    <div class="row" style="justify-content:space-between; margin-bottom:14px;">
+      <h3 style="margin:0; font-size:15px;">Settings</h3>
+      <button class="secondary" onclick="closeSettings()" style="padding:4px 10px;">&times;</button>
+    </div>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Software update</div>
+    <div class="row" style="gap:10px; align-items:center;">
+      <span id="updText" style="font-size:13px;">Version __VERSION__</span>
+    </div>
+    <div class="row" style="gap:8px; margin-top:8px;">
+      <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)">Check for updates</button>
+      <button id="updNowBtn" type="button" onclick="doUpdate()" style="display:none;">Update now</button>
+    </div>
+  </div>
+</div>
 
 <div id="nrImportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
   <div style="background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:20px; width:760px; max-width:94vw; max-height:88vh; overflow-y:auto;">
@@ -1570,7 +1588,9 @@ function applyNrImport() {
   setStatus(n + ' channel number(s) updated in the table - check them and press "Save all changes" to write them to the Brain.', 'ok');
 }
 
-// ---- self-update (server version only) ----
+// ---- settings + self-update (server version only) ----
+function openSettings() { document.getElementById('settingsModal').style.display = 'flex'; checkUpdate(false); }
+function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
 async function checkUpdate(manual) {
   const t = document.getElementById('updText'), b = document.getElementById('updNowBtn');
   if (manual) t.textContent = 'Checking...';
@@ -1580,9 +1600,11 @@ async function checkUpdate(manual) {
     if (j.error) { t.textContent = 'Version ' + j.current + (manual ? ' - could not check: ' + j.error : ''); return; }
     if (j.available) {
       t.textContent = 'Version ' + j.current + ' - new version ' + j.latest + ' available';
-      t.style.color = 'var(--accent, #ffd166)'; b.style.display = '';
+      t.style.color = 'var(--yellow)'; b.style.display = '';
+      document.getElementById('gearDot').classList.add('on');
     } else {
-      t.textContent = 'Version ' + j.current + ' - up to date'; b.style.display = 'none';
+      t.textContent = 'Version ' + j.current + ' - up to date'; t.style.color = ''; b.style.display = 'none';
+      document.getElementById('gearDot').classList.remove('on');
     }
   } catch (e) { t.textContent = 'Version (check failed)'; }
 }
