@@ -47,13 +47,12 @@ BRAIN_SSH_KEY = os.environ.get("NEEO_BRAIN_KEY", os.path.expanduser("~/.ssh/neeo
 BRAIN_SSH_USER = os.environ.get("NEEO_BRAIN_USER", "neeo")
 BRAIN_PICS_DIR = os.environ.get("NEEO_PICS_DIR", "/opt/mobile/eui/pics")
 SSH_BIN = os.environ.get("NEEO_SSH_BIN", "ssh")
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
-UPDATE_URL = os.environ.get(
-    "NEEO_UPDATE_URL",
-    "https://raw.githubusercontent.com/ichrui/neeo-channel-editor/main/server/neeo_channel_editor.py",
-)
+UPDATE_URL = os.environ.get("NEEO_UPDATE_URL")  # test override
+GH_REPO = "ichrui/neeo-channel-editor"
+GH_PATH = "server/neeo_channel_editor.py"
 
 
 PAGE = r"""<!DOCTYPE html>
@@ -1712,8 +1711,28 @@ def _vt(v):
     return tuple(int(x) for x in re.findall(r"\d+", v))
 
 
+def _remote_url():
+    """GitHub's raw 'main' URL is cached for up to 5 minutes, so a fresh push
+    would not show up right away. Ask the API for the newest commit and fetch
+    the file by that commit (unique URL, never stale). Falls back to 'main'."""
+    if UPDATE_URL:
+        return UPDATE_URL
+    ref = "main"
+    try:
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{GH_REPO}/commits/main",
+            headers={"User-Agent": "neeo-channel-editor", "Accept": "application/vnd.github.sha"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            sha = r.read().decode().strip()
+        if re.fullmatch(r"[0-9a-f]{40}", sha):
+            ref = sha
+    except Exception:
+        pass
+    return f"https://raw.githubusercontent.com/{GH_REPO}/{ref}/{GH_PATH}"
+
+
 def fetch_remote():
-    req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": "neeo-channel-editor"})
+    req = urllib.request.Request(_remote_url(), headers={"User-Agent": "neeo-channel-editor"})
     with urllib.request.urlopen(req, timeout=10) as r:
         text = r.read().decode("utf-8")
     m = re.search(r'^APP_VERSION = "([\d.]+)"', text, re.M)
