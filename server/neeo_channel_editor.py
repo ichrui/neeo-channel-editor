@@ -72,6 +72,7 @@ CHANGELOG = [
     ("1.4.3", ["New icon: blue channel list on black"]),
     ("1.4.4", ["Pop-up windows keep their title bar and close button visible while scrolling"]),
     ("1.4.5", ["Pop-up windows start at the top of the screen so the title bar is not hidden under the browser bar"]),
+    ("1.5.0", ["\"Update numbers\" moved into Settings; Settings sections can be opened and closed"]),
 ]
 
 # Browser / home-screen icons (original design: blue channel list on black).
@@ -82,7 +83,7 @@ ICONS = {
     "/icon-32.png": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADe0lEQVR42s2XTWwbRRTHfzO7jklMGtcONC2O5UggmqjQgpFQe6KnnOil0AP0htQLp4JUCS4gLiAk1AsHJLhUVGqrSqUgOFAkDkUQoVYKLR9SUN3EbUJK6w/UYCe2d+dx2LWx07XjQPPxpJHXu7P7f+/N//3nDXhm+b9J4ANgCqgABpD/OYz/rSn/28llmI2LQ8Ct+wC40rjlY7U4cbBpgnOfIg/KhNP0/2AdPAEUAias1agHWAASFvA2sN+/2UjJGpr2sfoApYDrQMp/qOqzlLIAQRAQQWmr+fEqTRDjtt7wbEYBNcBmY8xRTd7UQ0cpzc7xd4iPpJk88yqlfIbE0y+zNbkH48gqMiFoW1GYvsTclbPea9IKZy8HR4Sevhg7x99kYAfM/3KAzMXjpF86yZbt4FZXhY8dhsJMmflfP8c49ZeljQMioDSVco6r514jlkoz99MZQDHx8TjRxJNeBlR3HogYLFtRyE5inEojwJaY71mCdbYA8nk+2eEHCfXFWSxm/60fy14eQKApBcZ1AIW2LMQIIm43DihQYIX62HvkAvGRXXz/0Qvkfr/A4WOnGBndQ7ViUEp3SLtg24r8n3OceO8Q5YVixxWz7w1e0FaY/m1jRAb76R1IgILU6D6GH0tSWQKtOvIOy4KBwRQ94QjlhYKvPcGpCyxDRIgOP0P/w48zO3kaMS69kSixoSTGXakMBW0p7hbusFCcR2kLEUO7tWtDwvXjph3IIBFiqb30bxvlxuVPEdchHIkTGUxhjKC6EAIRQcSgteLv3DS1xWJgYG2FaN+Rb4gOR/juQ032x0947vWrRB/ZjlOFDhxsdcJ4QpSfzvDt+2MYt7aSEHlOuLVFijcvY4WeoJS/DsDtqa9xKk/hVgW1GiHq0eSuTXhlGCDFAYvt3bJCDxDqjbF094+mBKnumSF0xaN1YZtS2quE7spQo4BH9x8jnkpz5dxRFv+aZWjseaLDuzGO6UwCMWhbU8rNeCUsLp3kM4CEhp7IQ+w68C4DO+DOtR/IXDzOs698wZYhbzdUKwiR0uAswZdvTFDKZzpmIGA3VFTLeX776i3iI2nmf/4MgEsnXmRrcjdurTMJRbweoJTLUi5mAdUWfNPshk6QIHk9IA0Z/S89oRinq5YssCldY2s0pRo47wObdcy88THPb/jBZFMczTbF4XTDjuf/AGHcIO0lcVyuAAAAAElFTkSuQmCC"),
 }
 ICONS["/favicon.ico"] = ICONS["/icon-32.png"]
-APP_VERSION = "1.4.5"
+APP_VERSION = "1.5.0"
 # Self-update: the server fetches this file from GitHub (public repo) when you
 # press "Update now" in the page. Can be overridden for testing.
 UPDATE_URL = os.environ.get("NEEO_UPDATE_URL")  # test override
@@ -122,6 +123,13 @@ PAGE = r"""<!DOCTYPE html>
   }
   /* modal title bar stays visible (with the close button) while the content scrolls */
   .modal-head { position: sticky; top: -20px; z-index: 5; background: var(--panel); margin: -20px -20px 10px -20px; padding: 16px 20px 10px 20px; border-bottom: 1px solid var(--border); }
+  .set-sec { border-top: 1px solid var(--border); }
+  .set-sec:first-of-type { border-top: none; }
+  .set-sec > summary { cursor: pointer; padding: 12px 2px; font-size: 14px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
+  .set-sec > summary::-webkit-details-marker { display: none; }
+  .set-sec > summary::before { content: "\25B8"; color: var(--muted); font-size: 12px; display: inline-block; width: 12px; transition: transform .15s; }
+  .set-sec[open] > summary::before { transform: rotate(90deg); }
+  .set-body { padding: 0 2px 14px 20px; }
   header { position: relative; }
   #gearBtn { position: absolute; top: 14px; right: 16px; width: 38px; height: 38px; padding: 0; font-size: 20px; line-height: 1; border-radius: 10px; }
   #gearDot { display: none; position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--yellow); }
@@ -383,7 +391,6 @@ PAGE = r"""<!DOCTYPE html>
       </div>
       <div class="row">
         <button class="secondary" onclick="toggleAddForm()">+ New channel</button>
-        <button class="secondary" onclick="openNrImport()" title="Paste a channel list (name + number) to correct many channel numbers at once">Update numbers</button>
         <button class="secondary" onclick="expandCollapseAll(true)">Collapse all</button>
         <button class="secondary" onclick="expandCollapseAll(false)">Expand all</button>
         <button id="saveAllBtn" onclick="saveAllDirty()">Save all changes (<span id="dirtyCount">0</span>)</button>
@@ -434,31 +441,51 @@ PAGE = r"""<!DOCTYPE html>
       <h3 style="margin:0; font-size:15px;">Settings</h3>
       <button class="secondary" onclick="closeSettings()" style="padding:4px 10px;">&times;</button>
     </div>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Brain</div>
-    <div class="row" style="gap:8px;">
-      <label>Brain IP</label>
-      <input type="text" id="setIp" style="width:150px" inputmode="decimal" autocapitalize="off" autocorrect="off" spellcheck="false">
-      <button type="button" onclick="saveBrainIp()">Save</button>
-    </div>
-    <div id="setIpMsg" class="meta" style="margin-top:4px;"></div>
+    <details class="set-sec">
+      <summary>Channel numbers</summary>
+      <div class="set-body">
+        <div class="meta" style="margin-bottom:8px;">Paste a list (name + number), e.g. after the provider shifted the channels, to correct many numbers at once.</div>
+        <button class="secondary" type="button" onclick="closeSettings(); openNrImport();">Update numbers from a list</button>
+      </div>
+    </details>
 
-    <div style="font-size:12px; color:var(--muted); margin:18px 0 6px;">Backup of the channel lists</div>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">A backup is made automatically before the first change after loading. It is stored on this server (last 40 are kept).</div>
-    <div class="row" style="gap:8px;">
-      <button class="secondary" type="button" onclick="createBackup('manual')">Create backup now</button>
-    </div>
-    <div id="backupMsg" class="meta" style="margin-top:4px;"></div>
-    <div id="backupList" style="margin-top:8px;"></div>
+    <details class="set-sec">
+      <summary>Brain</summary>
+      <div class="set-body">
+        <div class="row" style="gap:8px;">
+          <label>Brain IP</label>
+          <input type="text" id="setIp" style="width:150px" inputmode="decimal" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <button type="button" onclick="saveBrainIp()">Save</button>
+        </div>
+        <div id="setIpMsg" class="meta" style="margin-top:4px;"></div>
+      </div>
+    </details>
 
-    <div style="font-size:12px; color:var(--muted); margin:18px 0 6px;">Software update</div>
-    <div class="row" style="gap:10px; align-items:center;">
-      <span id="updText" style="font-size:13px;">Version __VERSION__</span>
-    </div>
-    <div class="row" style="gap:8px; margin-top:8px;">
-      <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)">Check for updates</button>
-      <button id="updNowBtn" type="button" onclick="doUpdate()" style="display:none;">Update now</button>
-    </div>
-    <div id="updNotes" style="display:none; margin-top:10px; font-size:13px; border-top:1px solid var(--border); padding-top:8px;"></div>
+    <details class="set-sec">
+      <summary>Backup of the channel lists</summary>
+      <div class="set-body">
+        <div class="meta" style="margin-bottom:8px;">A backup is made automatically before the first change after loading. It is stored on this server (last 40 are kept).</div>
+        <div class="row" style="gap:8px;">
+          <button class="secondary" type="button" onclick="createBackup('manual')">Create backup now</button>
+        </div>
+        <div id="backupMsg" class="meta" style="margin-top:4px;"></div>
+        <div id="backupList" style="margin-top:8px;"></div>
+      </div>
+    </details>
+
+    <details class="set-sec" id="updSection">
+      <summary>Software update <span id="updSummary" class="meta"></span></summary>
+      <div class="set-body">
+        <div class="row" style="gap:10px; align-items:center;">
+          <span id="updText" style="font-size:13px;">Version __VERSION__</span>
+        </div>
+        <div class="row" style="gap:8px; margin-top:8px;">
+          <button id="updCheckBtn" class="secondary" type="button" onclick="checkUpdate(true)">Check for updates</button>
+          <button id="updNowBtn" type="button" onclick="doUpdate()" style="display:none;">Update now</button>
+        </div>
+        <div id="updNotes" style="display:none; margin-top:10px; font-size:13px; border-top:1px solid var(--border); padding-top:8px;"></div>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -1670,6 +1697,7 @@ function applyNrImport() {
 function openSettings() {
   document.getElementById('settingsModal').style.display = 'flex';
   document.getElementById('setIp').value = document.getElementById('ipInput').value;
+  document.querySelectorAll('#settingsModal .set-sec').forEach(d => { if (d.id !== 'updSection') d.open = false; });
   document.getElementById('setIpMsg').textContent = ''; document.getElementById('backupMsg').textContent = '';
   refreshBackups(); checkUpdate(false);
 }
@@ -1786,6 +1814,7 @@ async function checkUpdate(manual) {
       t.textContent = 'Version ' + j.current + ' - new version ' + j.latest + ' available';
       t.style.color = 'var(--yellow)'; b.style.display = '';
       document.getElementById('gearDot').classList.add('on');
+      document.getElementById('updSection').open = true;
       const nb = document.getElementById('updNotes');
       nb.innerHTML = '<div style="color:var(--muted); font-size:12px; margin-bottom:4px;">What is new</div>' +
         (j.notes || []).slice().reverse().map(n => '<div style="margin-top:6px;"><b>' + escapeHtml(n.version) + '</b><ul style="margin:2px 0 0; padding-left:18px;">' +
